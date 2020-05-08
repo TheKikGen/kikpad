@@ -1,6 +1,9 @@
 
 #include <string.h>
 #include <stdarg.h>
+#include "ringbuffer.h"
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // SerialPrintf : a light printf like to Serial.
 // %%  : %
@@ -153,9 +156,63 @@ enum {
   LS_A2  = PA5,
 } LedDriverPins;
 
+enum {
+  BT_VOLUME   = 0B1,
+  BT_SENDA    = 0B10,
+  BT_SENDB    = 0B100,
+  BT_PAN      = 0B1000,
+  BT_CONTROL1 = 0B10000,
+  BT_CONTROL2 = 0B100000,
+  BT_CONTROL3 = 0B1000000,
+  BT_CONTROL4 = 0B10000000,
+  BT_UP       = 0B100000000,
+  BT_DOWN     = 0B1000000000,
+  BT_LEFT     = 0B10000000000,
+  BT_RIGHT    = 0B100000000000,
+  BT_CLIP     = 0B1000000000000,
+  BT_MODE1    = 0B10000000000000,
+  BT_MODE2    = 0B100000000000000,
+  BT_SET      = 0B1000000000000000,
+  BT_MS1      = 1,
+  BT_MS2      = 10,
+  BT_MS3      = 100,
+  BT_MS4      = 1000,
+  BT_MS5      = 10000,
+  BT_MS6      = 100000,
+  BT_MS7      = 1000000,
+  BT_MS8      = 10000000,
+} ButtonsLedMsk;
 
-volatile uint32_t BtStates1 = PAD_PATTERN0;
-volatile uint32_t BtStates2 = PAD_PATTERN0;
+
+uint8_t ButtonsRows[]{PC8,PC9,PC10,PC11,PC12,PC12,PC14,PC15};
+uint8_t ButtonsColumns[]{PB0,PB1,PB2,PB3,PB4,PB5,PB6,PB7,PB8,PB9,PB10};
+
+volatile int ButtonsStates[8][11] = { {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                             {0,0,0,0,0,0,0,0,0,0,0},
+                           };
+
+int ButtonsEventsMap[8][11] = { {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                                {0,0,0,0,0,0,0,0,0,0,0},
+                             };
+
+volatile unsigned long isrTime;
+
+//RingBuffer<uint8_t,B_RING_BUFFER_MPACKET_SIZE> I2C_QPacketsToMaster;
+
+volatile uint32_t BtStates1 = PAD_PATTERN2;
+volatile uint32_t BtStates2 = PAD_PATTERN2;
 
 uint32_t PadStatesH = PAD_PATTERN0;
 uint32_t PadStatesL = PAD_PATTERN0;
@@ -176,29 +233,29 @@ uint8_t PadColorsL[] {
 
 volatile uint32_t PadColorRedMskH   = 0 ;
 volatile uint32_t PadColorGreenMskH = 0 ;
-volatile uint32_t PadColorBlueMaskH = 0 ;
+volatile uint32_t PadColorBlueMskH = 0 ;
 volatile uint32_t PadColorRedMskL   = 0 ;
 volatile uint32_t PadColorGreenMskL = 0 ;
-volatile uint32_t PadColorBlueMaskL = 0 ;
+volatile uint32_t PadColorBlueMskL = 0 ;
 boolean  PadColorMskNeedUpdate = false;
 
 
 
 void UpdatePadColorMskHL() {
 
-  PadColorRedMskH = PadColorGreenMskH = PadColorBlueMaskH = 0;
-  PadColorRedMskL = PadColorGreenMskL = PadColorBlueMaskL = 0;
+  PadColorRedMskH = PadColorGreenMskH = PadColorBlueMskH = 0;
+  PadColorRedMskL = PadColorGreenMskL = PadColorBlueMskL = 0;
 
   for ( uint8_t i = 0; i != 32 ; i++ ) {
     if ( PadStatesH & (1<<i) ) {
         if ( PadColorsH[i] & RED )   PadColorRedMskH   |= 1<<i;
         if ( PadColorsH[i] & GREEN ) PadColorGreenMskH |= 1<<i;
-        if ( PadColorsH[i] & BLUE )  PadColorBlueMaskH |= 1<<i;
+        if ( PadColorsH[i] & BLUE )  PadColorBlueMskH |= 1<<i;
     }
     if ( PadStatesL & (1<<i) ) {
         if ( PadColorsL[i] & RED )   PadColorRedMskL   |= 1<<i;
         if ( PadColorsL[i] & GREEN ) PadColorGreenMskL |= 1<<i;
-        if ( PadColorsL[i] & BLUE )  PadColorBlueMaskL |= 1<<i;
+        if ( PadColorsL[i] & BLUE )  PadColorBlueMskL |= 1<<i;
     }
   }
 
@@ -238,147 +295,18 @@ void SetLedBank(uint8_t addr ) {
   return;
 }
 
-void Parallel() {
-  uint32_t shift[]={ 0x55555555,
-                     0xaa55aa55,
-                     0x55aa55aa,
-                     0x5a5a5a5a,
-                     0xa5a5a5a5,
-                     0x55555555,
-                     0xaaaaaaaa,
-                   };
-
-  uint8_t bank = 0;
-
-  WriteDMC(0);
-  while (1) {
-    digitalWrite(LS_EN,HIGH);
-    delayMicroseconds(DELAY_DMC);
-
-    if (bank & 0B001 ) digitalWrite(LS_A0,HIGH);
-    else digitalWrite(LS_A0,LOW);
-
-    if ( bank & 0B010 ) digitalWrite(LS_A1,HIGH);
-    else digitalWrite(LS_A1,LOW);
-
-    if ( bank & 0B100 ) digitalWrite(LS_A2,HIGH);
-    else digitalWrite(LS_A2,LOW);
-
-    WriteDMC(shift[bank]);
-
-    digitalWrite(DM_EN,LOW);
-    digitalWrite(LS_EN,LOW);
-    delayMicroseconds(DELAY_DMC);
-    digitalWrite(LS_EN,LOW);
-    delayMicroseconds(400);
-
-    if (++bank == 8 ) bank =0;
-  }
-}
-
-
-
-
-void ColorTest() {
-
-
-  // for ( uint8_t i = 0; i < PAD_SIZE ; i++ ) {
-  //   if ( MyPads[i].on ) PadStates |= (1 << i);
-  //   else PadStates &= ~(1 << i);
-  // }
-
-  uint32_t maskRed = 0 ;
-  uint32_t maskGreen = 0 ;
-  uint32_t maskBlue = 0 ;
-
-  PadStatesH = PAD_PATTERN0;
-
-  for ( uint8_t j = 0; j != 32 ; j++ ) {
-    if ( PadStatesH & (1<<j) ) {
-        if ( PadColorsH[j] & RED ) maskRed     |= 1<<j;
-        if ( PadColorsH[j] & GREEN ) maskGreen |= 1<<j;
-        if ( PadColorsH[j] & BLUE ) maskBlue   |= 1<<j;
-    }
-  }
-  WriteDMC(0);
-  digitalWrite(LS_EN,LOW);
-
-  while (1) {
-    // generate RGB colors
-    // Red
-    SetLedBank(LED_BANK_HPAD_R);
-    WriteDMC(maskRed);
-    delayMicroseconds(DELAY_RGB);
-WriteDMC(0);
-    // Green
-    if ( maskGreen ) {
-      SetLedBank(LED_BANK_HPAD_G);
-      WriteDMC(maskGreen);
-      delayMicroseconds(DELAY_RGB);
-    }
-    WriteDMC(0);
-
-    // Blue
-    if ( maskBlue ) {
-      SetLedBank(LED_BANK_HPAD_B);
-      WriteDMC(maskBlue);
-      delayMicroseconds(DELAY_RGB);
-    }
-    WriteDMC(0);
-
-  } // For
-}
-
 
 //  ISR
-void Timer4Handler() {
+void RGBTimerHandler() {
+
+isrTime = micros();
+
   static uint8_t rgb = 0;
+  static uint8_t col = 0;
 
 
-
-
-
+  // LEDs /////////////////////////////////////////////////////////////////////
   // Compose RGB colors
-
-  // // Red
-  // if ( rgb == 0 ) {
-  //   SetLedBank(LED_BANK_HPAD_R);
-  //   WriteDMC(PadColorRedMskH);
-  //   delayMicroseconds(DELAY_RGB);
-  //   SetLedBank(LED_BANK_LPAD_R);
-  //   WriteDMC(PadColorRedMskL);
-  //
-  // } else
-  //
-  // // Green H
-  // if ( rgb == 1 ) {
-  //   SetLedBank(LED_BANK_HPAD_G);
-  //   WriteDMC(PadColorGreenMskH);
-  //   delayMicroseconds(DELAY_RGB);
-  //   SetLedBank(LED_BANK_LPAD_G);
-  //   WriteDMC(PadColorGreenMskL);
-  //
-  // } else
-  // // Blue H
-  // if ( rgb == 2 ) {
-  //   SetLedBank(LED_BANK_HPAD_B);
-  //   WriteDMC(PadColorBlueMaskH);
-  //   delayMicroseconds(DELAY_RGB);
-  //   SetLedBank(LED_BANK_LPAD_B);
-  //   WriteDMC(PadColorBlueMaskL);
-  // } else
-  // // Buttons
-  // if ( rgb == 3 ) {
-  //   SetLedBank(LED_BANK_BT1);
-  //   WriteDMC(BtStates1);
-  //   delayMicroseconds(DELAY_RGB);
-  //   SetLedBank(LED_BANK_BT2);
-  //   WriteDMC(BtStates2);
-  //
-  // }
-  // if ( ++rgb == 4 ) rgb = 0;
-
-
 
   WriteDMC(0);
   // digitalWrite(LS_EN,HIGH);
@@ -394,9 +322,9 @@ void Timer4Handler() {
     WriteDMC(PadColorGreenMskH);
   } else
   // Blue H
-  if ( rgb == 2 && PadColorBlueMaskH) {
+  if ( rgb == 2 && PadColorBlueMskH) {
     SetLedBank(LED_BANK_HPAD_B);
-    WriteDMC(PadColorBlueMaskH);
+    WriteDMC(PadColorBlueMskH);
   } else
   // Red L
   if ( rgb == 3 && PadColorRedMskL) {
@@ -409,9 +337,9 @@ void Timer4Handler() {
     WriteDMC(PadColorGreenMskL);
   } else
   // Blue l
-  if ( rgb == 5 && PadColorBlueMaskL) {
+  if ( rgb == 5 && PadColorBlueMskL) {
     SetLedBank(LED_BANK_LPAD_B);
-    WriteDMC(PadColorBlueMaskL);
+    WriteDMC(PadColorBlueMskL);
   } else
 
   // BUTTONS BARS
@@ -430,6 +358,38 @@ void Timer4Handler() {
 
   // digitalWrite(LS_EN,LOW);
 
+  // Buttons //////////////////////////////////////////////////////////////////
+
+  digitalWrite(ButtonsColumns[col],LOW);
+  for ( uint8_t r = 0 ; r != sizeof(ButtonsRows) ; r++ ) {
+        if ( digitalRead(ButtonsRows[r]) == LOW) {
+            if ( ButtonsStates[r][col] == 0 ) {
+                ButtonsStates[r][col] = 1;
+                //processEvent(keyValues[r][c],true);
+            }
+        }
+        else if ( ButtonsStates[r][col] == 1 ) {
+                ButtonsStates[r][col] = 0;
+                //processEvent(keyValues[r][c],false);
+        }
+  }
+
+  digitalWrite(ButtonsColumns[col],HIGH);
+  if ( ++col == 11 )  col = 0;
+
+
+  isrTime = micros() - isrTime;
+}
+
+
+uint8_t GetPadColor(uint8_t padIdx) {
+
+  if (padIdx > 63) return 0xFF;
+
+  if ( padIdx < 32 ) return PadColorsH[31 - padIdx] ;
+
+  return PadColorsL[63 - padIdx] ;
+
 }
 
 void SetPadColor(uint8_t padIdx,uint8_t color) {
@@ -447,7 +407,7 @@ void SetPadColor(uint8_t padIdx,uint8_t color) {
     padStates = &PadStatesH;
     padRedMsk = &PadColorRedMskH;
     padGreenMsk = &PadColorGreenMskH;
-    padBlueMsk = &PadColorBlueMaskH;
+    padBlueMsk = &PadColorBlueMskH;
     padIdx = 31 - padIdx;
     previousColor = PadColorsH[padIdx];
     PadColorsH[padIdx] = color ;
@@ -455,7 +415,7 @@ void SetPadColor(uint8_t padIdx,uint8_t color) {
     padStates = &PadStatesL;
     padRedMsk = &PadColorRedMskL;
     padGreenMsk = &PadColorGreenMskL;
-    padBlueMsk = &PadColorBlueMaskL;
+    padBlueMsk = &PadColorBlueMskL;
     padIdx = 63 - padIdx;
     previousColor = PadColorsL[padIdx];
     PadColorsL[padIdx] = color  ;
@@ -477,6 +437,19 @@ void SetPadColor(uint8_t padIdx,uint8_t color) {
   }
 }
 
+void SetPadColorBackground(uint8_t color) {
+
+  uint32_t  msk = ~(uint32_t)0;
+  for (uint8_t i=0 ; i != 32 ; i++ ) {
+    PadColorsH[i] = PadColorsL[i] = color;
+  }
+  PadStatesH = PadStatesL = msk;
+
+  if ( color & RED )  PadColorRedMskH = PadColorRedMskL = msk;
+  if ( color & GREEN ) PadColorGreenMskH = PadColorGreenMskL = msk;
+  if ( color & BLUE )  PadColorBlueMskH = PadColorBlueMskL = msk;
+
+}
 
 void SetPad(uint8_t padIdx,uint8_t state) {
 
@@ -493,14 +466,14 @@ void SetPad(uint8_t padIdx,uint8_t state) {
     padStates = &PadStatesH;
     padRedMsk = &PadColorRedMskH;
     padGreenMsk = &PadColorGreenMskH;
-    padBlueMsk = &PadColorBlueMaskH;
+    padBlueMsk = &PadColorBlueMskH;
     padIdx = 31 - padIdx;
     color = PadColorsH[padIdx];
   } else {
     padStates = &PadStatesL;
     padRedMsk = &PadColorRedMskL;
     padGreenMsk = &PadColorGreenMskL;
-    padBlueMsk = &PadColorBlueMaskL;
+    padBlueMsk = &PadColorBlueMskL;
     padIdx = 63 - padIdx;
     color = PadColorsL[padIdx];
   }
@@ -519,6 +492,40 @@ void SetPad(uint8_t padIdx,uint8_t state) {
     if ( color & BLUE )  *padBlueMsk |= mask;
   }
 }
+
+
+
+
+
+
+void ScanButtons() {
+  // 8 rows / 11 columns
+  // uint8_t ButtonsRows[]   {PC8,PC9,PC10,PC11,PC12,PC12,PC14,PC15};
+  // uint8_t ButtonsColumns[]{PB0,PB1,PB2,PB3,PB4,PB5,PB6,PB7,PB8,PB9,PB10};
+  // Scan keys and buttons
+
+  for ( uint8_t c = 0 ; c != sizeof(ButtonsColumns) ; c++ ) {
+
+      digitalWrite(ButtonsColumns[c],LOW);
+      delayMicroseconds(10);
+
+      for ( uint8_t r = 0 ; r != sizeof(ButtonsRows) ; r++ ) {
+            if ( digitalRead(ButtonsRows[r]) == LOW) {
+                if ( ButtonsStates[r][c] == 0 ) {
+                    ButtonsStates[r][c] = 1;
+                    //processEvent(keyValues[r][c],true);
+                }
+            }
+            else if ( ButtonsStates[r][c] == 1 ) {
+                    ButtonsStates[r][c] = 0;
+                    //processEvent(keyValues[r][c],false);
+            }
+      }
+
+      digitalWrite(ButtonsColumns[c],HIGH);
+  }
+}
+
 
 void setup() {
 
@@ -540,6 +547,20 @@ void setup() {
   pinMode(DM_DCK,OUTPUT);
   pinMode(DM_LAT,OUTPUT);
 
+  // BUTTONS
+
+  for (uint8_t i = 0; i< sizeof(ButtonsColumns) ; i++ ) {
+    pinMode(ButtonsColumns[i],OUTPUT_OPEN_DRAIN);
+    digitalWrite(ButtonsColumns[i],HIGH);
+  }
+
+  for (uint8_t i = 0; i< sizeof(ButtonsRows) ; i++ ) {
+    pinMode(ButtonsRows[i],INPUT);
+  }
+
+  // Disable JTAG to free pins
+  disableDebugPorts();
+
   // Configure TIMER.
   HardwareTimer *timerMillis = new HardwareTimer(1);
 
@@ -550,23 +571,28 @@ void setup() {
   timerMillis->setChannel1Mode(TIMER_OUTPUT_COMPARE);
   // Interrupt 1 count after each update
   timerMillis->setCompare(TIMER_CH4, 1);
-  timerMillis->attachInterrupt(TIMER_CH4, Timer4Handler);
+  timerMillis->attachInterrupt(TIMER_CH4, RGBTimerHandler);
   timerMillis->refresh();
 
 
-UpdatePadColorMskHL();
+  // Load color values
+  UpdatePadColorMskHL();
 
+  // Reset all leds
   WriteDMC(0);
+
   SetLedBank(LED_BANK_BT2);
   digitalWrite(DM_EN,LOW);
-digitalWrite(LS_EN,LOW);
+  digitalWrite(LS_EN,LOW);
 
-
-timerMillis->resume();
+  timerMillis->resume();
 }
 
-
+uint8_t prev_state = 0;
 void loop() {
+
+
+
 
   //ColorTest();
   // Update color mask is necessary
@@ -575,6 +601,37 @@ void loop() {
     PadColorMskNeedUpdate = false;
   }
 
+
+  if ( ButtonsStates[7][9] ) {
+    if (prev_state == 0)  {
+      SetPadColor(0,WHITE);
+      SetPadColor(1,WHITE);
+      SetPadColor(2,WHITE);
+      SetPadColor(3,WHITE);
+      SetPadColor(4,WHITE);
+      SetPadColor(5,WHITE);
+      SetPadColor(6,WHITE);
+      SetPadColor(7,WHITE);
+      prev_state=1;
+    }
+  } else {
+    if (prev_state == 1)  {
+
+      SetPadColor(0,BLUE);
+      SetPadColor(1,BLUE);
+      SetPadColor(2,BLUE);
+      SetPadColor(3,BLUE);
+      SetPadColor(4,BLUE);
+      SetPadColor(5,BLUE);
+      SetPadColor(6,BLUE);
+      SetPadColor(7,BLUE);
+
+      prev_state = 0;
+    }
+  }
+
+  SerialPrintf("ISR Time %d%n",isrTime);
+  
   // for ( uint8_t i=0; i!=64 ; i++ ) {
   //   SetPad(i,0);
   //   delay(5);
@@ -583,11 +640,33 @@ void loop() {
   //   SetPad(i,1);
   //   delay(5);
   // }
-  for ( uint8_t j=0 ; j< sizeof(LedColorsPalette); j++) {
-    for ( uint8_t i=0; i!=64 ; i++ ) {
-      SetPadColor(i,LedColorsPalette[j]);
-    }
-    delay(200);
-  }
+  // for ( uint8_t j=0 ; j< sizeof(LedColorsPalette); j++) {
+  //   for ( uint8_t i=0; i!=64 ; i++ ) {
+  //     SetPadColor(i,LedColorsPalette[j]);
+  //   }
+  //   delay(200);
+  // }
+  //
+  // for ( uint8_t j=0 ; j< sizeof(LedColorsPalette); j++) {
+  //   SetPadColorBackground(LedColorsPalette[j]);
+  //   delay(200);
+  // }
+  //
+  // BtStates1 = (uint32_t)~0;
+  // delay(20);
+  // for ( uint8_t j=0 ; j< 32; j++) {
+  //   BtStates1 >>= 1;
+  //   delay(20);
+  // }
+  //
+  // BtStates2 = (uint32_t)~0;
+  // delay(20);
+  // for ( uint8_t j=0 ; j< 32; j++) {
+  //   BtStates2 >>= 1;
+  //   delay(20);
+  // }
+  //
+
+
 
 }
