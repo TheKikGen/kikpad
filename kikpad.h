@@ -43,12 +43,16 @@ __ __| |           |  /_) |     ___|             |           |
 */
 
 // Timer refresh time for colors, scan lines, and encoders
-#define TIMER_RATE_MICROS 500
+#define TIMER_RATE_MICROS 50
 #define DELAY_DMC 1
 #define LED_BANK_SIZE 32
 #define LED_BANK_MAX 8
 #define PAD_SIZE 64
 #define RB_UEVENT_SIZE  32*sizeof(UserEvent_t)
+#define ENCODER_PPR 20
+//24
+//18
+//12
 
 // Some leds ON/Off patterns
 #define LED_BK_PATTERN1 0B11111111111111111111111111111111
@@ -76,6 +80,15 @@ enum {
   LS_A1   = PA4,
   LS_A2   = PA5,
 } LedDriverPins;
+
+// LS138 lines for 8 encoders
+enum {
+  EC_LS_A0 = PC0,
+  EC_LS_A1 = PC1,
+  EC_LS_A2 = PC2,
+  EC_KA    = PA1,
+  EC_KB    = PA0
+};
 
 // LS138 address to drive leds for pads H,L, and buttons bars
 enum {
@@ -142,6 +155,8 @@ typedef enum {
 EV_NONE,
 EV_BTN_PRESSED,
 EV_BTN_RELEASED,
+EV_EC_CW,
+EV_EC_CCW,
 } UserEventType_t;
 
 typedef struct{
