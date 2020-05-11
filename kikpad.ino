@@ -402,12 +402,17 @@ void ProcessUserEvent(UserEvent_t *ev){
   static uint8_t pad=0;
 
   if (ev->event == EV_EC_CW ) {
-    SetPadColor(ev->info1,RED);
+    for (uint8_t i ; i < 8 ; i++ ) {
+        SetPadColor(ev->info1+8*i,RED);
+    }
+
     return;
   }
 
   if (ev->event == EV_EC_CCW ) {
-    SetPadColor(ev->info1,BLUE);
+    for (uint8_t i ; i < 8 ; i++ ) {
+        SetPadColor(ev->info1+8*i,BLUE);  
+    }
     return;
   }
 
