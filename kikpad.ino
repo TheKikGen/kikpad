@@ -44,36 +44,57 @@ __ __| |           |  /_) |     ___|             |           |
 
 #include <string.h>
 #include <stdarg.h>
+
+#include <libmaple/nvic.h>
+#include "libmaple/flash.h"
+#include "libmaple/pwr.h"
+#include "libmaple/rcc.h"
+#include "libmaple/bkp.h"
+
 #include "kikpad.h"
+#include "usb_midi.h"
 #include "ringbuffer.h"
 #include "rotary.h"
 
 // TIMER
+HardwareTimer RGBRefreshTim2(2);
 HardwareTimer UserEventsTim3(3);
 
 // Queue (ring buffer) for User events
 RingBuffer<uint8_t,RB_UEVENT_SIZE> UserEventQueue;
 
 // Buttons Pad & bars scan lines
-const uint8_t    ButtonsRows[]      =  {PC8,PC9,PC10,PC11,PC12,PC13,PC14,PC15};
-const uint8_t    ButtonsColumns[]   =  {PB0,PB1,PB2,PB3,PB4,PB5,PB6,PB7,PB8,PB9,PB10};
+const uint8_t    ScanButtonsRows[]      =  {PC8,PC9,PC10,PC11,PC12,PC13,PC14,PC15};
+const uint8_t    ScanButtonsColumns[]   =  {PB0,PB1,PB2,PB3,PB4,PB5,PB6,PB7,PB8,PB9,PB10};
 
 // Encoders
 Rotary SPRotary[8];
 
-// 8 colors palette
-const ledColor_t LedColorsPalette[] =  {BLACK,RED, GREEN, BLUE,YELLOW, MAGENTA,CYAN,WHITE};
 // Led bank color map, in the same order than enum LedBankIds
 const ledColor_t PadLedBanksColorMap[] = { BLUE,RED,GREEN,BLUE,RED,GREEN,};
 
+// Buttons Banks and mask settings
+const uint8_t ButtonLedBankMsk[] = {
+  BTMSK_MS1, BTMSK_MS2, BTMSK_MS3, BTMSK_MS4, BTMSK_MS5,BTMSK_MS6, BTMSK_MS7, BTMSK_MS8,
+  BTMSK_UP, BTMSK_DOWN, BTMSK_LEFT,  BTMSK_RIGHT, BTMSK_CLIP, BTMSK_MODE1,  BTMSK_MODE2, BTMSK_SET,
+  BTMSK_VOLUME, BTMSK_SENDA,BTMSK_SENDB,BTMSK_PAN,BTMSK_CONTROL1,BTMSK_CONTROL2,BTMSK_CONTROL3,BTMSK_CONTROL4,
+};
+
+const uint8_t ButtonLedBankMap[] = {
+  1,1,1,1,1,1,1,1,
+  0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,
+};
+
+
 // Current led states (ON/Off)
 // Pads : Higer / Lower
-// Buttons : Left, bottom / Right
 volatile uint32_t  PadLedStates[]        = { LED_BK_PATTERN1, LED_BK_PATTERN1 };
-volatile uint32_t  ButtonsLedStates[]    = { LED_BK_PATTERN1, LED_BK_PATTERN1 };
+// Buttons : Left, bottom / Right
+volatile uint32_t  ButtonsLedStates[]    = { LED_BK_PATTERN5, LED_BK_PATTERN3 };
 
 // Current pad colors set
-uint8_t PadColors[] {
+uint8_t PadColorsCurrent[] {
    BLACK, RED,   GREEN,  BLUE,    YELLOW,  MAGENTA, CYAN,  WHITE,
    RED,   GREEN, BLUE,   YELLOW,  MAGENTA, CYAN,    WHITE, BLACK,
    GREEN, BLUE,  YELLOW, MAGENTA, CYAN,    WHITE,   BLACK, RED,
@@ -85,25 +106,12 @@ uint8_t PadColors[] {
    BLUE,  YELLOW,MAGENTA,CYAN,    WHITE,   BLACK,   RED,   GREEN
 };
 
-// //const uint8_t PadColorsPattern[][] = {
-//
-//   BLACK, RED,   GREEN,  BLUE,    YELLOW,  MAGENTA, CYAN,  WHITE,
-//   RED,   GREEN, BLUE,   YELLOW,  MAGENTA, CYAN,    WHITE, BLACK,
-//   GREEN, BLUE,  YELLOW, MAGENTA, CYAN,    WHITE,   BLACK, RED,
-//   BLUE,  YELLOW,MAGENTA,CYAN,    WHITE,   BLACK,   RED,   GREEN,
-//   BLACK, RED,   GREEN,  BLUE,    YELLOW,  MAGENTA, CYAN,  WHITE,
-//   RED,   GREEN, BLUE,   YELLOW,  MAGENTA, CYAN,    WHITE, BLACK,
-//   GREEN, BLUE,  YELLOW, MAGENTA, CYAN,    WHITE,   BLACK, RED,
-//   BLUE,  YELLOW,MAGENTA,CYAN,    WHITE,   BLACK,   RED,   GREEN
-//
-// }
-
 
 // Temporary pad color save
-uint8_t PadColorsSave[PAD_SIZE];
+uint8_t PadColorsBackup[PAD_SIZE];
 
 // buttons scan lines states (todo replace with binary)
-volatile int ButtonsStates[8][11] = {
+volatile uint16_t BtnScanStates[8][11] = {
           {0,0,0,0,0,0,0,0,0,0,0},
           {0,0,0,0,0,0,0,0,0,0,0},
           {0,0,0,0,0,0,0,0,0,0,0},
@@ -114,9 +122,10 @@ volatile int ButtonsStates[8][11] = {
           {0,0,0,0,0,0,0,0,0,0,0},
                            };
 
-volatile uint8_t ScanCols[11] = { 0,0,0,0,0,0,0,0,0,0,0 };
+//volatile uint8_t ScanCols[11] = { 0,0,0,0,0,0,0,0,0,0,0 };
 
-
+// USB Midi object & globals
+USBMidi MidiUSB;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -223,60 +232,61 @@ void SerialPrintf(const char *format, ...)
 }
 
 void WriteDMC(uint32_t mask) {
-  digitalWrite(DMC_DCK,LOW);
-  digitalWrite(DMC_LAT,LOW);
-  delayMicroseconds(DELAY_DMC);
+  FAST_DIGITAL_WRITE(DMC_DCK,0);
+  FAST_DIGITAL_WRITE(DMC_LAT,0);
+//  delayMicroseconds(DELAY_DMC);
   for ( uint8_t i = 0; i!= 32 ; i++ ) {
-    if ( mask & 1 ) digitalWrite(DMC_DAI, HIGH );
-    else digitalWrite(DMC_DAI, LOW );
-    delayMicroseconds(DELAY_DMC);
-    digitalWrite(DMC_DCK,HIGH);
-    delayMicroseconds(DELAY_DMC);
-    digitalWrite(DMC_DCK,LOW);
-    delayMicroseconds(DELAY_DMC);
+    if ( mask & 1 ) FAST_DIGITAL_WRITE(DMC_DAI, 1 );
+    else FAST_DIGITAL_WRITE(DMC_DAI, 0 );
+//    delayMicroseconds(DELAY_DMC);
+    FAST_DIGITAL_WRITE(DMC_DCK,1);
+//    delayMicroseconds(DELAY_DMC);
+    FAST_DIGITAL_WRITE(DMC_DCK,0);
+//    delayMicroseconds(DELAY_DMC);
     mask >>= 1;
   }
-  digitalWrite(DMC_LAT,HIGH);
-  delayMicroseconds(DELAY_DMC);
-  digitalWrite(DMC_LAT,LOW);
-  delayMicroseconds(DELAY_DMC);
+  FAST_DIGITAL_WRITE(DMC_LAT,1);
+//  delayMicroseconds(DELAY_DMC);
+  FAST_DIGITAL_WRITE(DMC_LAT,0);
+//  delayMicroseconds(DELAY_DMC);
 }
 
-boolean SetLedBank(uint8_t addr ) {
+boolean LedBankSet(uint8_t addr ) {
   static uint8_t lastAddr = 0xFF;
   if ( addr == lastAddr  ) return false;
 
   lastAddr = addr;
 
-  if ( addr & 1 ) digitalWrite(LS_A0, HIGH  ) ;
-  else digitalWrite(LS_A0, LOW  ) ;
+  if ( addr & 1 ) FAST_DIGITAL_WRITE(LS_A0, 1  ) ;
+  else FAST_DIGITAL_WRITE(LS_A0, 0  ) ;
 
-  if ( addr & 2 ) digitalWrite(LS_A1, HIGH  ) ;
-  else digitalWrite(LS_A1, LOW  ) ;
+  if ( addr & 2 ) FAST_DIGITAL_WRITE(LS_A1, 1  ) ;
+  else FAST_DIGITAL_WRITE(LS_A1, 0  ) ;
 
-  if ( addr & 4 ) digitalWrite(LS_A2, HIGH  ) ;
-  else digitalWrite(LS_A2, LOW  ) ;
+  if ( addr & 4 ) FAST_DIGITAL_WRITE(LS_A2, 1  ) ;
+  else FAST_DIGITAL_WRITE(LS_A2, 0  ) ;
 
   return true;
 }
 
-boolean SetEncoderTo(uint8_t addr ) {
+boolean EncoderBankSet(uint8_t addr ) {
   static uint8_t lastAddr = 0xFF;
   if ( addr == lastAddr  ) return false;
 
   lastAddr = addr;
 
-  if ( addr & 1 ) digitalWrite(EC_LS_A0, HIGH  ) ;
-  else digitalWrite(EC_LS_A0, LOW  ) ;
+  if ( addr & 1 ) FAST_DIGITAL_WRITE(EC_LS_A0, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A0, 0  ) ;
 
-  if ( addr & 2 ) digitalWrite(EC_LS_A1, HIGH  ) ;
-  else digitalWrite(EC_LS_A1, LOW  ) ;
+  if ( addr & 2 ) FAST_DIGITAL_WRITE(EC_LS_A1, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A1, 0  ) ;
 
-  if ( addr & 4 ) digitalWrite(EC_LS_A2, HIGH  ) ;
-  else digitalWrite(EC_LS_A2, LOW  ) ;
+  if ( addr & 4 ) FAST_DIGITAL_WRITE(EC_LS_A2, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A2, 0  ) ;
 
   return true;
 }
+
 
 // 374 uS
 //  ISR
@@ -284,9 +294,12 @@ void RGBTim3Handler() {
 
   static uint8_t ledPadBk = 0;
   static uint8_t ledBtBk = LED_BANK_BT1;
+  static uint8_t  colorQ = 0;
+  static uint8_t  colorShift = 0;
 
   // LEDs /////////////////////////////////////////////////////////////////////
-  // Compose RGB colors
+  // RGB colors quantization.
+  // 64 colors - rgbRGB (EGA)
 
   // Ligh off last bank.
   WriteDMC(0);
@@ -307,146 +320,150 @@ void RGBTim3Handler() {
 
     // Colors from pad 0 to pad 31 / pad 32 to 63. Order is reverse.
     for ( uint8_t i = 0; i != 32 ; i++ ) {
-      if ( ( PadColors[ofs - i] & PadLedBanksColorMap[ledPadBk] ) && (PadLedStates[idx] & (1<<i) ) ) dmcMask |= 1<<i;
+      if ( ( (PadColorsCurrent[ofs - i]>>colorShift) & PadLedBanksColorMap[ledPadBk] )
+                 && (PadLedStates[idx] & (1<<i) ) ) dmcMask |= 1<<i;
     }
 
-    if ( dmcMask ) {
-      SetLedBank(ledPadBk);
+  //  if ( dmcMask ) {
+      LedBankSet(ledPadBk);
       WriteDMC(dmcMask);
-    }
+//    }
 
     ledPadBk++;
   }
   // Alternate Buttons led bank to equilibrate timings between colors
   else {
     ledPadBk = 0;
-    SetLedBank(ledBtBk);
+    if ( ++colorQ == 3 ) colorQ = 0;
+    colorShift = colorQ < 2 ? 0:3;  // Manage msb/lsb
+
+    LedBankSet(ledBtBk);
     WriteDMC(ButtonsLedStates[ledBtBk-6]);
-    if ( ++ledBtBk == 8 )  ledBtBk = LED_BANK_BT1;
+    if ( ++ledBtBk ==  LED_BANK_MAX )  ledBtBk = LED_BANK_BT1;
   }
 
 }
 
-// 13 us without event
+// User events handler
 void UserEventsTim3Handler() {
-  static uint8_t col = 0;
-  // Buttons //////////////////////////////////////////////////////////////////
-  // 8 rows, 11 columns
-  digitalWrite(ButtonsColumns[col],LOW);
-  for ( uint8_t r = 0 ; r != sizeof(ButtonsRows) ; r++ ) {
-        if ( digitalRead(ButtonsRows[r]) == LOW) {
-            //if ( (ScanCols[r] & (1 << col)) == 0 ) {
-              //    ScanCols[r] |= (1 << col);
-        if (ButtonsStates[r][col] == 0 ) {
-                  ButtonsStates[r][col] = 1;
-                  UserEvent_t ev = { .event = EV_BTN_PRESSED, .info1 = r, .info2 = col } ;
-                  UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
-            }
-        }
-//        else if ( (ScanCols[r] & (1 << col)) == 1 ) {
-//                ScanCols[r] &= ~(1 << col);
-        else if ( ButtonsStates[r][col] == 1 ) {
-                ButtonsStates[r][col] = 0;
-                UserEvent_t ev = { .event = EV_BTN_RELEASED, .info1 = r, .info2 = col } ;
+  static uint8_t ecAddr = 0;
+
+  // Encoders /////////////////////////////////////////////////////////////////
+
+  if ( ecAddr & 1 ) FAST_DIGITAL_WRITE(EC_LS_A0, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A0, 0  ) ;
+
+  if ( ecAddr & 2 ) FAST_DIGITAL_WRITE(EC_LS_A1, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A1, 0  ) ;
+
+  if ( ecAddr & 4 ) FAST_DIGITAL_WRITE(EC_LS_A2, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A2, 0  ) ;
+
+  delayMicroseconds(4);
+
+  uint8_t state = SPRotary[ecAddr].read();
+
+  if (state == Rotary::dirCw ) {
+       UserEvent_t ev = { .event = EV_EC_CW, .info1 = ecAddr, .info2 = 0 } ;
+       UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
+
+  } else if (state == Rotary::dirCCw ) {
+      UserEvent_t ev = { .event = EV_EC_CCW, .info1 = ecAddr, .info2 = 0 } ;
+      UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
+  }
+
+  if (++ecAddr == 8) ecAddr = 0;
+
+  // Buttons /////////////////////////////////////////////////////////////////
+  static uint8_t c = 0;
+    //for ( uint8_t c = 0 ; c!= sizeof(ScanButtonsColumns); c++ ) {
+    for ( uint8_t r = 0 ; r !=sizeof(ScanButtonsRows) ;r++  ) {
+          FAST_DIGITAL_WRITE(ScanButtonsRows[r],1);
+          FAST_DIGITAL_WRITE(ScanButtonsColumns[c],0);
+          if ( FAST_DIGITAL_READ(ScanButtonsRows[r]) == 0 ) {
+            if (BtnScanStates[r][c] == 0 ) {
+                BtnScanStates[r][c] = 1;
+                UserEvent_t ev;
+                if ( c < 8 ) ev = { .event = EV_PAD_PRESSED, .info1 = r, .info2 = c } ;
+                else ev = { .event = EV_BTN_PRESSED, .info1 = r + (c-8)*8, .info2 = 0 } ;
                 UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
-        }
-  }
-  digitalWrite(ButtonsColumns[col],HIGH);
-  if ( ++col == 11 )  col = 0;
-}
-
-void SetPadColor(uint8_t padIdx,uint8_t color) {
-  if (padIdx > 63) return;
-  PadColors[padIdx] = color  ;
-}
-
-void PadColorSave(uint8_t padIdx) {
-  if (padIdx > 63) return;
-  PadColorsSave[padIdx] = PadColors[padIdx]  ;
-}
-
-void PadColorRestore(uint8_t padIdx) {
-  if (padIdx > 63) return;
-  PadColors[padIdx] = PadColorsSave[padIdx] ;
-}
-
-void SetPadColorBackground(uint8_t color) {
-  memset(PadColors,color,sizeof(PadColors));
-}
-
-void SetPad(uint8_t padIdx,uint8_t state) {
-
-  if (padIdx > 63) return;
-
-  uint8_t i,of;
-
-  if ( padIdx < 32 ) {
-    i = 0 ;
-    of = 31;
-  }
-  else {
-    i = 1;
-    of = 63;
-  }
-
-  if (state) PadLedStates[i] |=  1 << (of - padIdx) ;
-  else PadLedStates[i] &= ~( 1<< (of - padIdx) );
-}
-
-
-
-void ProcessUserEvent(UserEvent_t *ev){
-
-  uint8_t idx = ev->info1*8 + ev->info2;
-
-  static uint8_t pad=0;
-
-  if (ev->event == EV_EC_CW ) {
-    for (uint8_t i ; i < 8 ; i++ ) {
-        SetPadColor(ev->info1+8*i,RED);
+            }
+            else {
+              BtnScanStates[r][c]++;
+              if (  BtnScanStates[r][c] >= BT_HOLD_THRESHOLD ) {
+                BtnScanStates[r][c] = 0; // No release event
+                UserEvent_t ev;
+                if ( c < 8 ) ev = { .event = EV_PAD_HOLDED, .info1 = r, .info2 = c } ;
+                else ev = { .event = EV_BTN_HOLDED, .info1 = r + (c-8)*8, .info2 = 0 } ;
+              }
+            }
+          }
+          else if ( BtnScanStates[r][c] ) {
+                  BtnScanStates[r][c] = 0;
+                  UserEvent_t ev;
+                  if ( c < 8 ) ev = { .event = EV_PAD_RELEASED, .info1 = r, .info2 = c } ;
+                  else ev = { .event = EV_BTN_RELEASED, .info1 = r + (c-8)*8, .info2 = r } ;
+                  UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
+          }
+          FAST_DIGITAL_WRITE(ScanButtonsColumns[c],1);
     }
+//  }
+    if (++c == sizeof(ScanButtonsColumns) ) c =0;
+}
 
-    return;
-  }
 
-  if (ev->event == EV_EC_CCW ) {
-    for (uint8_t i ; i < 8 ; i++ ) {
-        SetPadColor(ev->info1+8*i,BLUE);  
+// Buttons //////////////////////////////////////////////////////////////////
+// 8 rows, 11 columns
+// 350 us without event
+void ScanButtonsTim3Handler() {
+  static uint8_t c = 0;
+    //for ( uint8_t c = 0 ; c!= sizeof(ScanButtonsColumns); c++ ) {
+    for ( uint8_t r = 0 ; r !=sizeof(ScanButtonsRows) ;r++  ) {
+          FAST_DIGITAL_WRITE(ScanButtonsRows[r],1);
+          FAST_DIGITAL_WRITE(ScanButtonsColumns[c],0);
+          if ( FAST_DIGITAL_READ(ScanButtonsRows[r]) == 0 ) {
+            if (BtnScanStates[r][c] == 0 ) {
+                BtnScanStates[r][c] = 1;
+                UserEvent_t ev;
+                if ( c < 8 ) ev = { .event = EV_PAD_PRESSED, .info1 = r, .info2 = c } ;
+                else ev = { .event = EV_BTN_PRESSED, .info1 = r + (c-8)*8, .info2 = 0 } ;
+                UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
+            }
+            else {
+              BtnScanStates[r][c]++;
+              if (  BtnScanStates[r][c] >= BT_HOLD_THRESHOLD ) {
+                BtnScanStates[r][c] = 0; // No release event
+                UserEvent_t ev;
+                if ( c < 8 ) ev = { .event = EV_PAD_HOLDED, .info1 = r, .info2 = c } ;
+                else ev = { .event = EV_BTN_HOLDED, .info1 = r + (c-8)*8, .info2 = 0 } ;
+              }
+            }
+          }
+          else if ( BtnScanStates[r][c] ) {
+                  BtnScanStates[r][c] = 0;
+                  UserEvent_t ev;
+                  if ( c < 8 ) ev = { .event = EV_PAD_RELEASED, .info1 = r, .info2 = c } ;
+                  else ev = { .event = EV_BTN_RELEASED, .info1 = r + (c-8)*8, .info2 = r } ;
+                  UserEventQueue.write((uint8_t*)&ev,sizeof(UserEvent_t));
+          }
+          FAST_DIGITAL_WRITE(ScanButtonsColumns[c],1);
     }
-    return;
-  }
-
-
-  // Pad
-  if (ev->info1 < 8 && ev->info2 < 8 ) {
-    uint8_t idx = ev->info1 + 8*ev->info2;
-    if (ev->event == EV_BTN_RELEASED ) {
-      SetPadColor(idx,  ev->info1);
-    }
-  }
-  else {
-    // Button
-    uint8_t idx = ev->info1*8 + ev->info2 -8 ;
-
-
-  }
-
-  SerialPrintf("Event %d %d %d%n",ev->event,ev->info1,ev->info2);
-//Serial.println("Event !");
+//  }
+    if (++c == sizeof(ScanButtonsColumns) ) c =0;
 }
 
 // 12us without EV
 void EncodersSwitchingTim3Handler() {
   static uint8_t ecAddr = 0;
 
-  if ( ecAddr & 1 ) digitalWrite(EC_LS_A0, HIGH  ) ;
-  else digitalWrite(EC_LS_A0, LOW  ) ;
+  if ( ecAddr & 1 ) FAST_DIGITAL_WRITE(EC_LS_A0, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A0, 0  ) ;
 
-  if ( ecAddr & 2 ) digitalWrite(EC_LS_A1, HIGH  ) ;
-  else digitalWrite(EC_LS_A1, LOW  ) ;
+  if ( ecAddr & 2 ) FAST_DIGITAL_WRITE(EC_LS_A1, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A1, 0  ) ;
 
-  if ( ecAddr & 4 ) digitalWrite(EC_LS_A2, HIGH  ) ;
-  else digitalWrite(EC_LS_A2, LOW  ) ;
+  if ( ecAddr & 4 ) FAST_DIGITAL_WRITE(EC_LS_A2, 1  ) ;
+  else FAST_DIGITAL_WRITE(EC_LS_A2, 0  ) ;
 
   delayMicroseconds(4);
 
@@ -466,14 +483,103 @@ void EncodersSwitchingTim3Handler() {
 }
 
 
+void PadSetColor(uint8_t padIdx,uint8_t color) {
+  if (padIdx >= PAD_SIZE) return;
+  PadColorsCurrent[padIdx] = color  ;
+}
+
+void PadColorsSave() {
+  memcpy(PadColorsBackup,PadColorsCurrent,PAD_SIZE);  ;
+}
+
+void PadColorsRestore(uint8_t padIdx) {
+  memcpy(PadColorsCurrent,PadColorsBackup,PAD_SIZE);
+}
+
+void PadColorsBackground(uint8_t color) {
+  memset(PadColorsCurrent,color,PAD_SIZE);
+}
+
+void PadSetLed(uint8_t padIdx,uint8_t state) {
+
+  if (padIdx >= PAD_SIZE) return;
+
+  uint8_t i,of;
+
+  if ( padIdx < 32 ) { i = 0 ;   of = 31; }
+  else { i = 1; of = 63; }
+
+  if (state == ON) PadLedStates[i] |=  1 << (of - padIdx) ;
+  else PadLedStates[i] &= ~( 1<< (of - padIdx) );
+}
+
+void ButtonSetLed(uint8_t bt,uint8_t state) {
+  if (bt >= BT_NB_MAX ) return;
+
+  if (state == ON)
+    ButtonsLedStates[ButtonLedBankMap[bt]] |= ButtonLedBankMsk[bt];
+  else ButtonsLedStates[ButtonLedBankMap[bt]] &= ~ButtonLedBankMsk[bt];
+}
+
+uint8_t ButtonGetLed(uint8_t bt) {
+  if (bt >= 23 ) return 0;
+
+  return (ButtonsLedStates[ButtonLedBankMap[bt]] & ButtonLedBankMsk[bt] ? ON:OFF);
+
+}
+
+
+void ProcessUserEvent(UserEvent_t *ev){
+
+  // Encoders Clock wise
+  if (ev->event == EV_EC_CW ) {
+    for (uint8_t i ; i < 8 ; i++ ) {
+        PadSetColor(ev->info1+8*i,RED);
+    }
+    return;
+  }
+  else
+
+  // Encoders Counter Clock wise
+  if (ev->event == EV_EC_CCW ) {
+    for (uint8_t i ; i < 8 ; i++ ) {
+        PadSetColor(ev->info1+8*i,BLUE);
+    }
+    return;
+  }
+  else
+
+  if (ev->event == EV_PAD_RELEASED ) {
+      PadSetColor(ev->info1+8*ev->info2,  ev->info1);
+  }
+  else
+
+  if (ev->event == EV_BTN_RELEASED ) {
+      if ( ev->info1 == BT_MS1 ) nvic_sys_reset();
+      else if ( ev->info1 == BT_SET ) PadColorsBackground(YELLOW);
+      else if ( ev->info1 == BT_CLIP ) PadColorsBackground(WHITE);
+      ButtonSetLed(ev->info1,OFF);
+  }
+
+  if (ev->event == EV_PAD_HOLDED ) {
+      PadSetLed(ev->info1, OFF);
+  }
+
+  if (ev->event == EV_BTN_HOLDED ) {
+      if ( ev->info1 == BT_CLIP ) PadColorsBackground(GREEN);
+  }
+}
+
 void setup() {
+
+  Serial.end();
 
   // Disable JTAG to free pins
   disableDebugPorts();
 
   // USB DISC PIN
-  gpio_set_mode(PIN_MAP[PA8].gpio_device, PIN_MAP[PA8].gpio_bit, GPIO_OUTPUT_PP);
-  gpio_write_bit(PIN_MAP[PA8].gpio_device, PIN_MAP[PA8].gpio_bit, 1);
+  pinMode(PA8, OUTPUT);
+  FAST_DIGITAL_WRITE(PA8,1);
   delay(2000);
 
   Serial.begin(115200);
@@ -481,26 +587,27 @@ void setup() {
 
   // Leds
   pinMode(DMC_EN,OUTPUT_OPEN_DRAIN);
-  digitalWrite(PA2,HIGH);
+  FAST_DIGITAL_WRITE(PA2,1);
   pinMode(LS_A0,OUTPUT);
   pinMode(LS_A1,OUTPUT);
   pinMode(LS_A2,OUTPUT);
 
   pinMode(LS_EN,OUTPUT_OPEN_DRAIN);
-  digitalWrite(LS_EN,HIGH);
+  FAST_DIGITAL_WRITE(LS_EN,1);
   pinMode(DMC_DAI,OUTPUT);
   pinMode(DMC_DCK,OUTPUT);
   pinMode(DMC_LAT,OUTPUT);
 
   // BUTTONS
 
-  for (uint8_t i = 0; i< sizeof(ButtonsColumns) ; i++ ) {
-    pinMode(ButtonsColumns[i],OUTPUT_OPEN_DRAIN);
-    digitalWrite(ButtonsColumns[i],HIGH);
+  for (uint8_t i = 0; i< sizeof(ScanButtonsColumns) ; i++ ) {
+    pinMode(ScanButtonsColumns[i],OUTPUT_OPEN_DRAIN);
+    FAST_DIGITAL_WRITE(ScanButtonsColumns[i],1);
   }
 
-  for (uint8_t i = 0; i< sizeof(ButtonsRows) ; i++ ) {
-    pinMode(ButtonsRows[i],INPUT);
+  for (uint8_t i = 0; i< sizeof(ScanButtonsRows) ; i++ ) {
+    pinMode(ScanButtonsRows[i],INPUT_PULLUP );
+    FAST_DIGITAL_WRITE(ScanButtonsRows[i],1);
   }
 
   // Encoders
@@ -510,84 +617,48 @@ void setup() {
 
   for (uint8_t i=0; i!=8 ; i++ ) SPRotary[i].begin(EC_KA,EC_KB);
 
-  // Timer 3 for buttons , RGB pad colors, and encoders
+  // Timer 2 for RGB pad colors,
+  // Timer 3 for buttons , and encoders
+
+  RGBRefreshTim2.pause();
   UserEventsTim3.pause();
-  UserEventsTim3.setPeriod(TIMER_RATE_MICROS); // in microseconds
+
+  RGBRefreshTim2.setPeriod(TIMER_RGB_PERIOD); // in microseconds
+  RGBRefreshTim2.setMode(TIMER_CH1, TIMER_OUTPUT_COMPARE);
+  RGBRefreshTim2.setCompare(TIMER_CH1, 1);
+  RGBRefreshTim2.attachInterrupt(TIMER_CH1, RGBTim3Handler);
+
+  UserEventsTim3.setPeriod(TIMER_USER_EVENTS_PERIOD); // in microseconds
   UserEventsTim3.setMode(TIMER_CH1, TIMER_OUTPUT_COMPARE);
-  UserEventsTim3.setCompare(TIMER_CH1, 8); // 400us
-  UserEventsTim3.attachInterrupt(TIMER_CH1, RGBTim3Handler);
+  UserEventsTim3.setCompare(TIMER_CH1, 1);
+  UserEventsTim3.attachInterrupt(TIMER_CH1, UserEventsTim3Handler);
 
-  UserEventsTim3.setMode(TIMER_CH2, TIMER_OUTPUT_COMPARE);
-  UserEventsTim3.setCompare(TIMER_CH2, 4); // 200 us
-  UserEventsTim3.attachInterrupt(TIMER_CH2, UserEventsTim3Handler);
-
-  UserEventsTim3.setMode(TIMER_CH3, TIMER_OUTPUT_COMPARE);
-  UserEventsTim3.setCompare(TIMER_CH3, 1); // 1 = 50us
-  UserEventsTim3.attachInterrupt(TIMER_CH3, EncodersSwitchingTim3Handler);
+  RGBRefreshTim2.refresh();
   UserEventsTim3.refresh();
 
   // Reset all leds
   WriteDMC(0);
-  SetLedBank(LED_BANK_BT2);
-  digitalWrite(DMC_EN,LOW);
-  digitalWrite(LS_EN,LOW);
+  LedBankSet(LED_BANK_BT2);
+  FAST_DIGITAL_WRITE(DMC_EN,0);
+  FAST_DIGITAL_WRITE(LS_EN,0);
+
+  // Start USB Midi
+  //MidiUSB.begin() ;
+  //delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
 
   // Start timer
+  RGBRefreshTim2.resume();
   UserEventsTim3.resume();
+
+  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
 }
 
 void loop() {
-
-
-//
-//   for ( uint8_t i = 0 ; i != sizeof(ButtonsColumns) ; i++ ) {
-//       digitalWrite(ButtonsColumns[i],HIGH);
-//       delayMicroseconds(10);
-//   }
-//
-//
-// while (1) {
-//
-//
-//   for (uint8_t col = 0; col != sizeof(ButtonsColumns) ; col++ ) {
-//
-//     // Buttons //////////////////////////////////////////////////////////////////
-//     // 8 rows, 11 columns
-//     digitalWrite(ButtonsColumns[col],LOW);
-//
-//     for ( uint8_t r = 0 ; r != sizeof(ButtonsRows) ; r++ ) {
-//           if ( digitalRead(ButtonsRows[r]) == LOW)
-//             SetPadColor(r,RED);
-//           else SetPadColor(r,WHITE);
-//     }
-//
-//     digitalWrite(ButtonsColumns[col],HIGH);
-//   }
-// }
-
-// unsigned long t1 = micros();
-// EncodersSwitchingTim3Handler() ;
-// t1 = micros()- t1;
-// SerialPrintf("EncodersSwitchingTim3Handler() time %d%n",t1);
-// delay(100);
-// t1 = micros();
-// UserEventsTim3Handler() ;
-// t1 = micros()- t1;
-// SerialPrintf("UserEventsTim3Handler() time %d%n",t1);
-// delay(100);
-// t1 = micros();
-// RGBTim3Handler() ;
-// t1 = micros()- t1;
-// SerialPrintf("RGBTim3Handler() time %d%n",t1);
-// delay(1000);
-
-
 
   if (UserEventQueue.available() >= sizeof(UserEvent_t) ) {
     UserEvent_t ev;
     UserEventQueue.readBytes((uint8_t *)&ev,sizeof(UserEvent_t));
     ProcessUserEvent(&ev);
   }
-
 
 }

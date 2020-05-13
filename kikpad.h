@@ -43,16 +43,14 @@ __ __| |           |  /_) |     ___|             |           |
 */
 
 // Timer refresh time for colors, scan lines, and encoders
-#define TIMER_RATE_MICROS 50
+#define TIMER_RGB_PERIOD 450
+#define TIMER_USER_EVENTS_PERIOD 200
 #define DELAY_DMC 1
 #define LED_BANK_SIZE 32
 #define LED_BANK_MAX 8
 #define PAD_SIZE 64
 #define RB_UEVENT_SIZE  32*sizeof(UserEvent_t)
 #define ENCODER_PPR 20
-//24
-//18
-//12
 
 // Some leds ON/Off patterns
 #define LED_BK_PATTERN1 0B11111111111111111111111111111111
@@ -63,11 +61,19 @@ __ __| |           |  /_) |     ___|             |           |
 #define LED_BK_PATTERN6 0B11111111000000001111111100000000
 #define LED_BK_PATTERN7 0B10000001010000100010010000011000
 
+// GPIO fast macros
+#define FAST_DIGITAL_WRITE(pin,value) gpio_write_bit(PIN_MAP[pin].gpio_device, PIN_MAP[pin].gpio_bit, value)
+#define FAST_DIGITAL_READ(pin) gpio_read_bit(PIN_MAP[pin].gpio_device, PIN_MAP[pin].gpio_bit)
+#define FAST_PINMODE(pin,mode) gpio_set_mode(PIN_MAP[pin].gpio_device, PIN_MAP[pin].gpio_bit, (gpio_pin_mode) mode)
+
 // Led on / off values
 enum {
-  LED_OFF,
-  LED_ON
-} LedSwitch;
+  OFF,
+  ON
+} Switch;
+
+// Button hold threshold.  500uS unit
+#define BT_HOLD_THRESHOLD 2*2000
 
 // Pins of DMC13 and LS138 driving leds
 enum {
@@ -140,7 +146,8 @@ enum {
   BTMSK_MS6      = 100000,
   BTMSK_MS7      = 1000000,
   BTMSK_MS8      = 10000000,
-} btnmask;
+} ButtonLedBankMaskEnum;
+
 
 
 // Events names for buttons (pads are managed differently)
@@ -148,13 +155,19 @@ enum {
   BT_MS1,   BT_MS2,  BT_MS3,  BT_MS4,   BT_MS5,  BT_MS6,     BT_MS7,     BT_MS8,
   BT_UP,    BT_DOWN, BT_LEFT, BT_RIGHT, BT_CLIP, BT_MODE1,   BT_MODE2,   BT_SET,
   E_VOLUME, BT_SENDA,BT_SENDB,BT_PAN,BT_CONTROL1,BT_CONTROL2,BT_CONTROL3,BT_CONTROL4,
-} ButtonEventTypes;
+  BT_NB_MAX // Max buttons number
+} ButtonEventNames;
 
 // User Event type
 typedef enum {
 EV_NONE,
+EV_ERROR,
 EV_BTN_PRESSED,
 EV_BTN_RELEASED,
+EV_BTN_HOLDED,
+EV_PAD_PRESSED,
+EV_PAD_RELEASED,
+EV_PAD_HOLDED,
 EV_EC_CW,
 EV_EC_CCW,
 } UserEventType_t;
@@ -164,3 +177,12 @@ typedef struct{
   uint8_t info1;
   uint8_t info2;
 }  __packed UserEvent_t;
+
+
+// Functions prototypes
+void SerialPrintf(const char *format, ...)  ;
+void PadSetColor(uint8_t padIdx,uint8_t color);
+void PadColorsSave();
+void PadColorsRestore(uint8_t padIdx);
+void PadColorsBackground(uint8_t color);
+void PadSetLed(uint8_t padIdx,uint8_t state);
