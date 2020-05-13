@@ -43,14 +43,39 @@ __ __| |           |  /_) |     ___|             |           |
 */
 
 // Timer refresh time for colors, scan lines, and encoders
-#define TIMER_RGB_PERIOD 450
-#define TIMER_USER_EVENTS_PERIOD 200
+#define TIMER_RGB_PERIOD 500
+#define TIMER_USER_EVENTS_PERIOD 400
 #define DELAY_DMC 1
 #define LED_BANK_SIZE 32
 #define LED_BANK_MAX 8
+#define PAD_COLOR_DEPTH 3
 #define PAD_SIZE 64
 #define RB_UEVENT_SIZE  32*sizeof(UserEvent_t)
-#define ENCODER_PPR 20
+
+// Sysex internal buffer size
+#define GLOBAL_DATA_BUFF_SIZE 64
+
+// LED ON recovery time in msec when no dedicated LED for CONNECT USB
+#define LED_CONNECT_USB_RECOVER_TIME_MILLIS 500
+
+// Default is stm32duino bootloader.
+#define HID_BOOTLOADER
+
+// Boot modes magic words
+#ifdef HID_BOOTLOADER
+  #define BOOT_BTL_MAGIC        0x424C
+  #define BOOT_BTL_MAGIC_NOWAIT 0x0000
+  #define BOOT_BTL_REGISTER     DR10
+#else
+  #define BOOT_BTL_MAGIC        0x424C
+  #define BOOT_BTL_MAGIC_NOWAIT 0x424D
+  #define BOOT_BTL_REGISTER     DR10
+#endif
+
+// Configuration mode magic word.
+#define BOOT_CONFIG_MAGIC 0x3012
+#define BOOT_MIDI_MAGIC   0x0000
+#define BOOT_REGISTER     DR5
 
 // Some leds ON/Off patterns
 #define LED_BK_PATTERN1 0B11111111111111111111111111111111
@@ -177,6 +202,11 @@ typedef struct{
   uint8_t info1;
   uint8_t info2;
 }  __packed UserEvent_t;
+// Use this structure to send and receive packet to/from USB /serial/BUS
+typedef union  {
+    uint32_t i;
+    uint8_t  packet[4];
+} __packed midiPacket_t;
 
 
 // Functions prototypes

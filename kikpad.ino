@@ -55,6 +55,7 @@ __ __| |           |  /_) |     ___|             |           |
 #include "usb_midi.h"
 #include "ringbuffer.h"
 #include "rotary.h"
+#include <midiXparser.h>
 
 // TIMER
 HardwareTimer RGBRefreshTim2(2);
@@ -62,6 +63,21 @@ HardwareTimer UserEventsTim3(3);
 
 // Queue (ring buffer) for User events
 RingBuffer<uint8_t,RB_UEVENT_SIZE> UserEventQueue;
+
+// Serial interfaces Array
+HardwareSerial * serialHw = &Serial1;
+
+// USB Midi object & globals
+USBMidi MidiUSB;
+bool	  midiUSBCx      = false ;
+bool    midiUSBIdle    = false ;
+bool 	  isSerialBusy   = false ;
+
+// MIDI Parsers for serial 1
+midiXparser midiSerial;
+
+// Multi purpose data buffer.
+uint8_t globalDataBuffer[GLOBAL_DATA_BUFF_SIZE] ;
 
 // Buttons Pad & bars scan lines
 const uint8_t    ScanButtonsRows[]      =  {PC8,PC9,PC10,PC11,PC12,PC13,PC14,PC15};
@@ -72,6 +88,8 @@ Rotary SPRotary[8];
 
 // Led bank color map, in the same order than enum LedBankIds
 const ledColor_t PadLedBanksColorMap[] = { BLUE,RED,GREEN,BLUE,RED,GREEN,};
+
+static volatile uint32_t PadLedBanksRGBMsk[3][6];
 
 // Buttons Banks and mask settings
 const uint8_t ButtonLedBankMsk[] = {
@@ -124,8 +142,6 @@ volatile uint16_t BtnScanStates[8][11] = {
 
 //volatile uint8_t ScanCols[11] = { 0,0,0,0,0,0,0,0,0,0,0 };
 
-// USB Midi object & globals
-USBMidi MidiUSB;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -232,23 +248,24 @@ void SerialPrintf(const char *format, ...)
 }
 
 void WriteDMC(uint32_t mask) {
-  FAST_DIGITAL_WRITE(DMC_DCK,0);
-  FAST_DIGITAL_WRITE(DMC_LAT,0);
-//  delayMicroseconds(DELAY_DMC);
+  //FAST_DIGITAL_WRITE(DMC_DCK,0);
+  //FAST_DIGITAL_WRITE(DMC_LAT,0);
+  //delayMicroseconds(DELAY_DMC);
   for ( uint8_t i = 0; i!= 32 ; i++ ) {
+  //while (mask) {
     if ( mask & 1 ) FAST_DIGITAL_WRITE(DMC_DAI, 1 );
     else FAST_DIGITAL_WRITE(DMC_DAI, 0 );
-//    delayMicroseconds(DELAY_DMC);
+    //delayMicroseconds(DELAY_DMC);
     FAST_DIGITAL_WRITE(DMC_DCK,1);
-//    delayMicroseconds(DELAY_DMC);
+    //delayMicroseconds(DELAY_DMC);
     FAST_DIGITAL_WRITE(DMC_DCK,0);
-//    delayMicroseconds(DELAY_DMC);
+    //delayMicroseconds(DELAY_DMC);
     mask >>= 1;
   }
   FAST_DIGITAL_WRITE(DMC_LAT,1);
-//  delayMicroseconds(DELAY_DMC);
+  //delayMicroseconds(DELAY_DMC);
   FAST_DIGITAL_WRITE(DMC_LAT,0);
-//  delayMicroseconds(DELAY_DMC);
+  //delayMicroseconds(DELAY_DMC);
 }
 
 boolean LedBankSet(uint8_t addr ) {
@@ -287,15 +304,89 @@ boolean EncoderBankSet(uint8_t addr ) {
   return true;
 }
 
+void RGBMaskUpdate(uint8_t padIdx) {
+  if (padIdx >= PAD_SIZE) return;
+
+  uint8_t idx,ofs,st;
+
+  if ( padIdx < 32 ) {
+      idx = 31-padIdx;
+      ofs = 0;
+      st = 0;
+  }
+  else {
+      idx = 63-padIdx;
+      ofs = 3;
+      st = 1;
+  }
+
+  for ( uint8_t b= ofs ; b != ofs+3 ; b++) {
+    for (uint8_t colorQ = 0; colorQ != 3 ; colorQ++) {
+        uint8_t colorShift = colorQ < 2 ? 0:3;  // Manage msb/lsb
+        if (  ( (PadColorsCurrent[padIdx]>>colorShift) & PadLedBanksColorMap[b] ) && (PadLedStates[st] & (1<< idx) ) )
+              PadLedBanksRGBMsk[colorQ][b] |= 1<<idx;    // set
+        else  PadLedBanksRGBMsk[colorQ][b] &= ~(1<<idx); // reset
+    }
+  }
+}
+
+void RGBMaskUpdate() {
+  for ( uint8_t b = 0 ; b!= 6; b++) {
+
+    // Color Depth
+    for (uint8_t colorQ = 0; colorQ != 3 ; colorQ++) {
+
+        uint8_t colorShift = colorQ < 2 ? 0:3;  // Manage msb/lsb
+        uint8_t  ofs, idx;
+
+        PadLedBanksRGBMsk[colorQ][b] = 0;
+        if ( b < LED_BANK_LPAD_B ) {
+            // Higher pad
+           ofs = 31; idx = 0;
+        } else {
+          // Lower pad
+           ofs = 63; idx = 1;
+        }
+
+        // 32 pad led par bank
+        for ( uint8_t i = 0; i != 32 ; i++ ) {
+          if ( ( (PadColorsCurrent[ofs - i]>>colorShift) & PadLedBanksColorMap[b] )
+                         && (PadLedStates[idx] & (1<<i) ) ) PadLedBanksRGBMsk[colorQ][b] |= 1<<i;
+        }
+    }
+  }
+}
 
 // 374 uS
 //  ISR
-void RGBTim3Handler() {
+// void RGBTim3Handler() {
+//
+//   // LEDs /////////////////////////////////////////////////////////////////////
+//   // RGB colors quantization.
+//   // 64 colors - rgbRGB (EGA)
+//
+//   // Ligh off last bank.
+//   //WriteDMC(0);
+//
+//   static uint8_t bt = 0;
+//   uint8_t b;
+//   for ( uint8_t c=0; c !=3; c++) {
+//       for ( b=0; b!=6 ; b++ ) {
+//         LedBankSet(b);
+//         WriteDMC(PadLedBanksRGBMsk[b][c]);
+//       }
+//   }
+//
+//
+//   LedBankSet(b+bt);
+//   WriteDMC(ButtonsLedStates[bt]);
+//   bt = !bt;
+// }
 
+void RGBTim3Handler() {
   static uint8_t ledPadBk = 0;
-  static uint8_t ledBtBk = LED_BANK_BT1;
-  static uint8_t  colorQ = 0;
-  static uint8_t  colorShift = 0;
+  static uint8_t ledBtBk  = 0;
+  static uint8_t colorQ   = 0;
 
   // LEDs /////////////////////////////////////////////////////////////////////
   // RGB colors quantization.
@@ -304,44 +395,22 @@ void RGBTim3Handler() {
   // Ligh off last bank.
   WriteDMC(0);
 
-  // Pads
+  // Pads leds
   if ( ledPadBk < LED_BANK_BT1 ) {
-    uint32_t dmcMask = 0;
-    uint8_t  ofs;
-    uint8_t  idx;
-
-    if ( ledPadBk < LED_BANK_LPAD_B ) {
-       ofs = 31;
-       idx = 0;
-    } else {
-       ofs = 63;
-       idx = 1;
-    }
-
-    // Colors from pad 0 to pad 31 / pad 32 to 63. Order is reverse.
-    for ( uint8_t i = 0; i != 32 ; i++ ) {
-      if ( ( (PadColorsCurrent[ofs - i]>>colorShift) & PadLedBanksColorMap[ledPadBk] )
-                 && (PadLedStates[idx] & (1<<i) ) ) dmcMask |= 1<<i;
-    }
-
-  //  if ( dmcMask ) {
       LedBankSet(ledPadBk);
-      WriteDMC(dmcMask);
-//    }
-
-    ledPadBk++;
+      WriteDMC(PadLedBanksRGBMsk[colorQ][ledPadBk]);
+      ledPadBk++;
   }
-  // Alternate Buttons led bank to equilibrate timings between colors
+
+  // Alternate with buttons led bank to equilibrate timings between colors
   else {
-    ledPadBk = 0;
-    if ( ++colorQ == 3 ) colorQ = 0;
-    colorShift = colorQ < 2 ? 0:3;  // Manage msb/lsb
+      ledPadBk = 0;
+      if ( ++colorQ == 3 ) colorQ = 0;
 
-    LedBankSet(ledBtBk);
-    WriteDMC(ButtonsLedStates[ledBtBk-6]);
-    if ( ++ledBtBk ==  LED_BANK_MAX )  ledBtBk = LED_BANK_BT1;
+      LedBankSet(LED_BANK_BT1 + ledBtBk);
+      WriteDMC(ButtonsLedStates[ledBtBk]);
+      ledBtBk = ! ledBtBk; // 2 buttons banks only, so we can toggle
   }
-
 }
 
 // User events handler
@@ -485,7 +554,10 @@ void EncodersSwitchingTim3Handler() {
 
 void PadSetColor(uint8_t padIdx,uint8_t color) {
   if (padIdx >= PAD_SIZE) return;
+  if (color == PadColorsCurrent[padIdx]) return;
+
   PadColorsCurrent[padIdx] = color  ;
+  RGBMaskUpdate(padIdx);
 }
 
 void PadColorsSave() {
@@ -494,10 +566,12 @@ void PadColorsSave() {
 
 void PadColorsRestore(uint8_t padIdx) {
   memcpy(PadColorsCurrent,PadColorsBackup,PAD_SIZE);
+  RGBMaskUpdate();
 }
 
 void PadColorsBackground(uint8_t color) {
   memset(PadColorsCurrent,color,PAD_SIZE);
+  RGBMaskUpdate();
 }
 
 void PadSetLed(uint8_t padIdx,uint8_t state) {
@@ -511,6 +585,7 @@ void PadSetLed(uint8_t padIdx,uint8_t state) {
 
   if (state == ON) PadLedStates[i] |=  1 << (of - padIdx) ;
   else PadLedStates[i] &= ~( 1<< (of - padIdx) );
+
 }
 
 void ButtonSetLed(uint8_t bt,uint8_t state) {
@@ -570,6 +645,58 @@ void ProcessUserEvent(UserEvent_t *ev){
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// MIDI USB Loop Process
+///////////////////////////////////////////////////////////////////////////////
+void USBMidi_Process()
+{
+  // Try to connect/reconnect USB if we detect a high level on USBDM
+	// This is to manage the case of a powered device without USB active or suspend mode for ex.
+  static unsigned long ledCxMillis = 0;
+  static unsigned long lastPacketMillis = 0;
+
+	if ( MidiUSB.isConnected() ) {
+    if ( !midiUSBCx) {
+        PadSetColor(0, BLUE);
+        midiUSBCx = true;
+    }
+
+
+		// Do we have a MIDI USB packet available ?
+		if ( MidiUSB.available() ) {
+        PadSetColor(0, GREEN);
+				midiPacket_t pk ;
+				pk.i = MidiUSB.readPacket();
+// Echo
+midiPacket_t pk2;
+pk2.packet[0] = 0x09;
+pk2.packet[1] = 0x90;
+pk2.packet[2] = 0x40;
+pk2.packet[3] = 0x40;
+
+MidiUSB.writePacket(&pk2.i);
+
+		}
+	}
+	// Are we physically connected to USB
+	else {
+        if ( midiUSBCx) {
+            PadSetColor(0, RED);
+            midiUSBCx = false;
+        }
+//LED_TurnOff(&LED_ConnectTick);
+
+
+  }
+
+	// if ( midiUSBIdle && !midiIthruActive && EE_Prm.ithruJackInMsk) {
+	// 		midiIthruActive = true;
+	// 		FlashAllLeds(0); // All leds when Midi intellithru mode active
+	// }
+
+}
+
+
 void setup() {
 
   Serial.end();
@@ -582,8 +709,8 @@ void setup() {
   FAST_DIGITAL_WRITE(PA8,1);
   delay(2000);
 
-  Serial.begin(115200);
-  delay(4000);
+  //Serial.begin(115200);
+  //delay(4000);
 
   // Leds
   pinMode(DMC_EN,OUTPUT_OPEN_DRAIN);
@@ -642,18 +769,23 @@ void setup() {
   FAST_DIGITAL_WRITE(DMC_EN,0);
   FAST_DIGITAL_WRITE(LS_EN,0);
 
-  // Start USB Midi
-  //MidiUSB.begin() ;
-  //delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
-
   // Start timer
-  RGBRefreshTim2.resume();
   UserEventsTim3.resume();
+  RGBRefreshTim2.resume();
 
   for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
+  RGBMaskUpdate();
+
+  // Start USB Midi
+  MidiUSB.begin() ;
+  delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
+
+
 }
 
 void loop() {
+
+  USBMidi_Process();
 
   if (UserEventQueue.available() >= sizeof(UserEvent_t) ) {
     UserEvent_t ev;
