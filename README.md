@@ -12,7 +12,7 @@ We did it again !
 
 The KikGen Labs proposes again a firmware entirely rewritten for a commercial product.  This time it is the **Smartpad** from Midiplus, which technical characteristics being very close to the Launchpad from Novation.  
 
-At this stage, the firmware is an advanced a prototype, with all pads, encoders, buttons operationals, including midi.   
+At this stage, the firmware is an advanced prototype, with all pads, 64 RGB colors, encoders, buttons operationals, including midi.   
 The perspectives offered by this new firmware are vast: fully customized Ableton Live controller, chord generator, autonomous sequencer, master keyboard , etc....
 
 I want to thank here DerFetzer for his similar project (developed in Rust) and the impulse he gave me for the launch of this project realized under "lockdown " !  have a look here : https://github.com/DerFetzer/open-cleverpad
