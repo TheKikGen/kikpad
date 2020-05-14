@@ -97,8 +97,8 @@ enum {
   ON
 } Switch;
 
-// Button hold threshold.  500uS unit
-#define BT_HOLD_THRESHOLD 2*2000
+// Button hold threshold around 2s.
+#define BT_HOLD_THRESHOLD 500
 
 // Pins of DMC13 and LS138 driving leds
 enum {
@@ -145,6 +145,16 @@ typedef enum {
   WHITE   = 0B111
 } ledColor_t;
 
+enum {
+  COLOR_LINE,
+  COLOR_COL,
+  COLOR_CROSS
+} colorLineModEnum;
+
+// Macros to get a button or a pad sequential index in the 8x11 matrix
+// 0,0 is the upper left corner
+#define SCAN_IDX(r,c) ( 8 * r + c )
+
 // Buttons masks in hte appropirate led bank
 enum {
   BTMSK_VOLUME   = 0B1,
@@ -177,9 +187,9 @@ enum {
 
 // Events names for buttons (pads are managed differently)
 enum {
-  BT_MS1,   BT_MS2,  BT_MS3,  BT_MS4,   BT_MS5,  BT_MS6,     BT_MS7,     BT_MS8,
-  BT_UP,    BT_DOWN, BT_LEFT, BT_RIGHT, BT_CLIP, BT_MODE1,   BT_MODE2,   BT_SET,
-  E_VOLUME, BT_SENDA,BT_SENDB,BT_PAN,BT_CONTROL1,BT_CONTROL2,BT_CONTROL3,BT_CONTROL4,
+  BT_MS1,   BT_MS2,  BT_MS3,  BT_MS4,  BT_MS5,     BT_MS6,     BT_MS7,     BT_MS8,
+  BT_UP,    BT_DOWN, BT_LEFT, BT_RIGHT,BT_CLIP,    BT_MODE1,   BT_MODE2,   BT_SET,
+  BT_VOLUME,BT_SENDA,BT_SENDB,BT_PAN,  BT_CONTROL1,BT_CONTROL2,BT_CONTROL3,BT_CONTROL4,
   BT_NB_MAX // Max buttons number
 } ButtonEventNames;
 
@@ -192,15 +202,14 @@ EV_BTN_RELEASED,
 EV_BTN_HOLDED,
 EV_PAD_PRESSED,
 EV_PAD_RELEASED,
-EV_PAD_HOLDED,
 EV_EC_CW,
 EV_EC_CCW,
 } UserEventType_t;
 
 typedef struct{
-  uint8_t event;
-  uint8_t info1;
-  uint8_t info2;
+  uint8_t ev;
+  uint8_t d1;
+  uint8_t d2;
 }  __packed UserEvent_t;
 // Use this structure to send and receive packet to/from USB /serial/BUS
 typedef union  {
