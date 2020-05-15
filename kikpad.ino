@@ -98,7 +98,7 @@ const ledColor_t PadLedBanksColorMap[] = { BLUE,RED,GREEN,BLUE,RED,GREEN,};
 static volatile uint32_t PadLedBanksRGBMsk[PAD_COLOR_DEPTH][LED_BANK_MAX-2];
 
 // Buttons Banks and mask settings
-const uint8_t ButtonLedBankMsk[] = {
+const uint32_t ButtonLedBankMsk[] = {
   BTMSK_MS1,   BTMSK_MS2,  BTMSK_MS3,  BTMSK_MS4,  BTMSK_MS5,     BTMSK_MS6,     BTMSK_MS7,     BTMSK_MS8,
   BTMSK_UP,    BTMSK_DOWN, BTMSK_LEFT, BTMSK_RIGHT,BTMSK_CLIP,    BTMSK_MODE1,   BTMSK_MODE2,   BTMSK_SET,
   BTMSK_VOLUME,BTMSK_SENDA,BTMSK_SENDB,BTMSK_PAN,  BTMSK_CONTROL1,BTMSK_CONTROL2,BTMSK_CONTROL3,BTMSK_CONTROL4,
@@ -114,7 +114,7 @@ const uint8_t ButtonLedBankMap[] = {
 // Pads : Higer / Lower
 volatile uint32_t  PadLedStates[]        = { LED_BK_PATTERN1, LED_BK_PATTERN1 };
 // Buttons : Left, bottom / Right
-volatile uint32_t  ButtonsLedStates[]    = { LED_BK_PATTERN5, LED_BK_PATTERN3 };
+volatile uint32_t  ButtonsLedStates[]    = { 0, 0 };
 
 // Current pad colors set
 uint8_t PadColorsCurrent[] {
@@ -128,6 +128,18 @@ uint8_t PadColorsCurrent[] {
    GREEN, BLUE,  YELLOW, MAGENTA, CYAN,    WHITE,   BLACK, RED,
    BLUE,  YELLOW,MAGENTA,CYAN,    WHITE,   BLACK,   RED,   GREEN
 };
+
+const uint8_t KikGenLogo[] {
+  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
+  WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  BLUE ,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
+  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,
+};
+
 
 // Temporary pad color save
 uint8_t PadColorsBackup[PAD_SIZE];
@@ -540,6 +552,9 @@ void PadSetLed(uint8_t padIdx,uint8_t state) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Set a button LED ON/OFF
+//-----------------------------------------------------------------------------
+// Bank 0 is 16 bits. First is Set (bit 16), Last is volume (bit 31)
+// Bank 1 is 8 bits.  First is 8. Bit 24.
 ///////////////////////////////////////////////////////////////////////////////
 void ButtonSetLed(uint8_t bt,uint8_t state) {
   if (bt >= BT_NB_MAX ) return;
@@ -552,12 +567,33 @@ void ButtonSetLed(uint8_t bt,uint8_t state) {
 ///////////////////////////////////////////////////////////////////////////////
 // Get the led state ON/OFF of a button
 ///////////////////////////////////////////////////////////////////////////////
-
 uint8_t ButtonGetLed(uint8_t bt) {
-  if (bt >= 23 ) return 0;
+  if (bt >= BT_NB_MAX ) return 0;
 
   return (ButtonsLedStates[ButtonLedBankMap[bt]] & ButtonLedBankMsk[bt] ? ON:OFF);
 
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Get the current pressed state of a button (not a pad !)
+///////////////////////////////////////////////////////////////////////////////
+boolean ButtonIsPressed(uint8_t bt) {
+  if (bt >= BT_NB_MAX ) return 0;
+  // r and c are inversed in the scan array
+  uint8_t r = bt/8 ;
+  uint8_t c = bt - 8*r ;
+  return ( BtnScanStates[c][r+8] ? true:false );
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Get the current pressed state of a pad (not a button !)
+///////////////////////////////////////////////////////////////////////////////
+boolean PadIsPressed(uint8_t padIdx) {
+  if (padIdx >= PAD_SIZE ) return 0;
+  // r and c are inversed in the scan array
+  uint8_t r = padIdx/8 ;
+  uint8_t c = padIdx - 8*r ;
+  return ( BtnScanStates[c][r] ? true:false );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -597,19 +633,29 @@ void ProcessUserEvent(UserEvent_t *ev){
 
       // Button pressed and not released
       case EV_BTN_PRESSED:
+          // Reset
+          if ( idx == BT_SET && ButtonIsPressed(BT_MODE2) && ButtonIsPressed(BT_MS8) ) {
+              // All pads and buttons off
+              PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
+              delay(100);
+              nvic_sys_reset();
+          }
+
         break;
 
       // Button released
       case EV_BTN_RELEASED:
         if ( idx == BT_MS1 )         nvic_sys_reset();
-        else if ( idx == BT_SET )    PadColorsBackground(YELLOW);
         else if ( idx == BT_CLIP )   PadColorsBackground(WHITE);
+        else if ( idx == BT_SET )   PadColorsBackground(YELLOW);
         else if ( idx == BT_VOLUME ) PadColorsRow(COLOR_LINE,ev->d1,GREEN);
         break;
 
       // Button pressed and holded more than 2s
       case EV_BTN_HOLDED:
           if ( idx == BT_CONTROL4 ) PadColorsBackground(MAGENTA);
+          if ( idx == BT_UP ) ButtonSetLed(idx, (ButtonGetLed(idx) == ON ? OFF:ON) ) ;
+
 
         break;
 
@@ -743,15 +789,25 @@ void setup() {
   UserEventsTim3.resume();
   RGBRefreshTim2.resume();
 
-  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
+//  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
+
+  memcpy(PadColorsCurrent,KikGenLogo,sizeof(PadColorsCurrent));
   RGBMaskUpdate();
 
   // Start USB Midi
-  MidiUSB.begin() ;
+  //MidiUSB.begin() ;
 
-  //Serial.begin(115200);
+  Serial.begin(115200);
 
   delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
+
+
+   ButtonSetLed(BT_MS1,ON);
+   ButtonSetLed(BT_MS8,ON);
+   ButtonSetLed(BT_VOLUME,ON);
+   ButtonSetLed(BT_CONTROL4,ON);
+   ButtonSetLed(BT_UP,ON);
+   ButtonSetLed(BT_SET,ON);
 
 }
 ///////////////////////////////////////////////////////////////////////////////
