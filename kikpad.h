@@ -42,9 +42,13 @@ __ __| |           |  /_) |     ___|             |           |
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+
+#ifndef _KIKPAD_H_
+#define _KIKPAD_H_
+
 // Timer refresh time for colors, scan lines, and encoders
-#define TIMER_RGB_PERIOD 200
-#define TIMER_USER_EVENTS_PERIOD 400
+#define TIMER_RGB_PERIOD 300
+#define TIMER_USER_EVENTS_PERIOD 50
 #define DELAY_DMC 1
 #define LED_BANK_SIZE 32
 #define LED_BANK_MAX 8
@@ -208,6 +212,21 @@ EV_EC_CW,
 EV_EC_CCW,
 } UserEventType_t;
 
+
+// Midi Control change
+enum {
+  CC_VOL = 7,
+  CC_PAN = 10,
+  CC_EFFECT1 = 12,
+  CC_EFFECT2 = 13,
+  CC_CUTOFF = 71,
+  CC_RESO = 74,
+
+} MidiControlChangeEnum;
+
+
+
+
 typedef struct{
   uint8_t ev;
   uint8_t d1;
@@ -222,8 +241,17 @@ typedef union  {
 
 // Functions prototypes
 void SerialPrintf(const char *format, ...)  ;
+void RGBMaskUpdate(uint8_t padIdx);
+void RGBMaskUpdateAll(void);
 void PadSetColor(uint8_t padIdx,uint8_t color);
-void PadColorsSave();
+void PadColorsSave(void);
 void PadColorsRestore(uint8_t padIdx);
 void PadColorsBackground(uint8_t color);
+void PadColorsRow(uint8_t mode, uint8_t padIdx,uint8_t color);
 void PadSetLed(uint8_t padIdx,uint8_t state);
+void ButtonSetLed(uint8_t bt,uint8_t state);
+uint8_t ButtonGetLed(uint8_t bt);
+boolean ButtonIsPressed(uint8_t bt);
+boolean PadIsPressed(uint8_t padIdx);
+
+#endif

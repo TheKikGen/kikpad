@@ -163,6 +163,8 @@ volatile uint16_t BtnScanStates[8][11] = {
 ///////////////////////////////////////////////////////////////////////////////
 // DO NOT REMOVE OR CHANGE THE ORDER !
 
+#include "mod_kikpadmode0.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 //  CORE FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////
@@ -276,7 +278,7 @@ void SerialPrintf(const char *format, ...)
 // Bits are sent serialized from 0 to 31 with a clokc synchronization.
 // End of transmission is done by raising LAT(ch)
 ///////////////////////////////////////////////////////////////////////////////
-void WriteDMC(uint32_t mask) {
+static void WriteDMC(uint32_t mask) {
   //FAST_DIGITAL_WRITE(DMC_DCK,0);
   //FAST_DIGITAL_WRITE(DMC_LAT,0);
   //delayMicroseconds(DELAY_DMC);
@@ -305,7 +307,7 @@ void WriteDMC(uint32_t mask) {
 // . 3-5 are used by lower pads, respectively for colors Blue, Red, Green
 // . 6-7 are used by buttons left+bottom and right
 ///////////////////////////////////////////////////////////////////////////////
-boolean LedBankSet(uint8_t addr ) {
+static boolean LedBankSet(uint8_t addr ) {
   static uint8_t lastAddr = 0xFF;
   if ( addr == lastAddr  ) return false;
 
@@ -345,7 +347,7 @@ void RGBMaskUpdate(uint8_t padIdx) {
 ///////////////////////////////////////////////////////////////////////////////
 // Update RGB colors mask used for RGB quantization of all 64 pads
 ///////////////////////////////////////////////////////////////////////////////
-void RGBMaskUpdate() {
+void RGBMaskUpdateAll() {
   for ( uint8_t b = 0 ; b!= 6; b++) {
 
     // Color Depth
@@ -505,7 +507,7 @@ void PadColorsSave() {
 ///////////////////////////////////////////////////////////////////////////////
 void PadColorsRestore(uint8_t padIdx) {
   memcpy(PadColorsCurrent,PadColorsBackup,PAD_SIZE);
-  RGBMaskUpdate();
+  RGBMaskUpdateAll();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -513,7 +515,7 @@ void PadColorsRestore(uint8_t padIdx) {
 ///////////////////////////////////////////////////////////////////////////////
 void PadColorsBackground(uint8_t color) {
   memset(PadColorsCurrent,color,PAD_SIZE);
-  RGBMaskUpdate();
+  RGBMaskUpdateAll();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -599,37 +601,14 @@ boolean PadIsPressed(uint8_t padIdx) {
 ///////////////////////////////////////////////////////////////////////////////
 // Process users events (pads & buttons + encoders)
 //-----------------------------------------------------------------------------
-// Events are store in a queue (a ring buffer in fact)
+// Events are stored in a queue (a ring buffer in fact)
 // Event will contain the eventId, row & column
 ///////////////////////////////////////////////////////////////////////////////
-void ProcessUserEvent(UserEvent_t *ev){
+static void ProcessUserEvent(UserEvent_t *ev){
 
     uint8_t idx = SCAN_IDX(ev->d1,ev->d2);
 
-    SerialPrintf("ev=%d d1=%d d2=%d%n",ev->ev,ev->d1,ev->d2);
-
     switch (ev->ev) {
-
-      // Encoders Clock wise
-      case EV_EC_CW:
-        PadColorsRow(COLOR_COL,idx,RED);
-        break;
-
-      // Encoders Counter Clock wise
-      case EV_EC_CCW:
-        PadColorsRow(COLOR_COL,idx,BLUE);
-        break;
-
-      // Pad pressed and not released
-      case EV_PAD_PRESSED:
-        PadSetColor(idx,WHITE);
-        break;
-
-      // Pad released
-      case EV_PAD_RELEASED:
-        //PadSetColor(idx,idx);
-        PadColorsRow(COLOR_CROSS,idx,GREEN);
-        break;
 
       // Button pressed and not released
       case EV_BTN_PRESSED:
@@ -643,30 +622,17 @@ void ProcessUserEvent(UserEvent_t *ev){
 
         break;
 
-      // Button released
-      case EV_BTN_RELEASED:
-        if ( idx == BT_MS1 )         nvic_sys_reset();
-        else if ( idx == BT_CLIP )   PadColorsBackground(WHITE);
-        else if ( idx == BT_SET )   PadColorsBackground(YELLOW);
-        else if ( idx == BT_VOLUME ) PadColorsRow(COLOR_LINE,ev->d1,GREEN);
-        break;
-
-      // Button pressed and holded more than 2s
-      case EV_BTN_HOLDED:
-          if ( idx == BT_CONTROL4 ) PadColorsBackground(MAGENTA);
-          if ( idx == BT_UP ) ButtonSetLed(idx, (ButtonGetLed(idx) == ON ? OFF:ON) ) ;
-
-
-        break;
-
     }
 
+    ProcessMode0(ev);
+
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // MIDI USB Loop Process
 ///////////////////////////////////////////////////////////////////////////////
-void USBMidi_Process()
+static void USBMidi_Process()
 {
   // Try to connect/reconnect USB if we detect a high level on USBDM
 	// This is to manage the case of a powered device without USB active or suspend mode for ex.
@@ -686,13 +652,6 @@ void USBMidi_Process()
 				midiPacket_t pk ;
 				pk.i = MidiUSB.readPacket();
 // Echo
-midiPacket_t pk2;
-pk2.packet[0] = 0x09;
-pk2.packet[1] = 0x90;
-pk2.packet[2] = 0x40;
-pk2.packet[3] = 0x40;
-
-MidiUSB.writePacket(&pk2.i);
 
 		}
 	}
@@ -792,22 +751,23 @@ void setup() {
 //  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
 
   memcpy(PadColorsCurrent,KikGenLogo,sizeof(PadColorsCurrent));
-  RGBMaskUpdate();
+  RGBMaskUpdateAll();
+  // All Leds On
+  PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0xFFFFFFFF;
 
   // Start USB Midi
-  //MidiUSB.begin() ;
+  MidiUSB.begin() ;
 
-  Serial.begin(115200);
+  //Serial.begin(115200);
 
   delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
 
+  // All buttons Leds Off
+  ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
 
-   ButtonSetLed(BT_MS1,ON);
-   ButtonSetLed(BT_MS8,ON);
-   ButtonSetLed(BT_VOLUME,ON);
-   ButtonSetLed(BT_CONTROL4,ON);
-   ButtonSetLed(BT_UP,ON);
-   ButtonSetLed(BT_SET,ON);
+  // Pads to black
+  PadColorsBackground(BLACK);
+
 
 }
 ///////////////////////////////////////////////////////////////////////////////
