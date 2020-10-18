@@ -680,7 +680,7 @@ void setup() {
   Serial.end();
 
   // Disable JTAG to free pins
-  disableDebugPorts();
+  afio_cfg_debug_ports(AFIO_DEBUG_SW_ONLY);
 
   // USB DISC PIN
   pinMode(PA8, OUTPUT);
