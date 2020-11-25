@@ -6,7 +6,7 @@
 # KIKPAD
 KiKPad : the Midiplus SmartPad reinvented !  
 
-<img alt="SmartPad from Midiplus" style="border-width:0" src="http://www.midiplus.com/images/xpad-1.jpg" /></a>
+<img alt="SmartPad from Midiplus" style="border-width:0" src="https://img.static-thomann.de/thumb/orig/pics/bdb/456726/13950016_800.webp" /></a>
 
 We did it again ! 
 
