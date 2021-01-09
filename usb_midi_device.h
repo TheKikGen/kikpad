@@ -130,10 +130,10 @@ uint8_t usb_midi_is_transmitting(void);
 
 #define USB_MIDI_VENDORID            0x2912
 #define USB_MIDI_PRODUCTID           0x1970
-#define USB_MIDI_PRODUCT_STRING      "USB MIDIKliK 4x4"
-#define USB_MIDI_PRODUCT_SERIAL      "07DA0908"
+#define USB_MIDI_PRODUCT_STRING      "KIKPAD"
+#define USB_MIDI_PRODUCT_SERIAL      "KP000001"
 
-// String buffer Size in the descriptor without tailing zero.
+// String buffer Size in the descriptor without trailing zero.
 // The real buffer size is USB_MIDI_PRODUCT_STRING_SIZE*2 +2
 #define USB_MIDI_PRODUCT_STRING_SIZE 30
 

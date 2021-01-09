@@ -62,24 +62,10 @@ __ __| |           |  /_) |     ___|             |           |
 // LED ON recovery time in msec when no dedicated LED for CONNECT USB
 #define LED_CONNECT_USB_RECOVER_TIME_MILLIS 500
 
-// Default is stm32duino bootloader.
-#define HID_BOOTLOADER
-
 // Boot modes magic words
-#ifdef HID_BOOTLOADER
-  #define BOOT_BTL_MAGIC        0x424C
-  #define BOOT_BTL_MAGIC_NOWAIT 0x0000
-  #define BOOT_BTL_REGISTER     DR10
-#else
-  #define BOOT_BTL_MAGIC        0x424C
-  #define BOOT_BTL_MAGIC_NOWAIT 0x424D
-  #define BOOT_BTL_REGISTER     DR10
-#endif
-
-// Configuration mode magic word.
-#define BOOT_CONFIG_MAGIC 0x3012
-#define BOOT_MIDI_MAGIC   0x0000
-#define BOOT_REGISTER     DR5
+#define BOOT_BTL_MAGIC        0x424C
+#define BOOT_BTL_REGISTER     DR10
+#define BOOT_CONFIG_MAGIC     0x0000
 
 // Some leds ON/Off patterns
 #define LED_BK_PATTERN1 0B11111111111111111111111111111111
@@ -224,14 +210,13 @@ enum {
 
 } MidiControlChangeEnum;
 
-
-
-
+// High level user event management
 typedef struct{
   uint8_t ev;
   uint8_t d1;
   uint8_t d2;
 }  __packed UserEvent_t;
+
 // Use this structure to send and receive packet to/from USB /serial/BUS
 typedef union  {
     uint32_t i;

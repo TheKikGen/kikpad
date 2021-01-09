@@ -42,8 +42,23 @@ __ __| |           |  /_) |     ___|             |           |
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
-// Mode0 : Midi basic configuration
-void ProcessMode0(UserEvent_t *ev){
+// KIKPAD_DEMO : A Midi out only basic keyboard
+
+#ifndef _KIKPAD_MODULE_H_
+#define _KIKPAD_MODULE_H_
+
+///////////////////////////////////////////////////////////////////////////////
+// PARSE A RECEIVED USB MIDI PACKET
+///////////////////////////////////////////////////////////////////////////////
+void KikpadMod_USBMidiParse(midiPacket_t *pk)
+{
+  return;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// PARSE A RECEIVED USER EVENT
+///////////////////////////////////////////////////////////////////////////////
+void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
   // 32 pads defined as midi keyboard. Offset + 32
   // -1 = No Note
   // -2 = transpose - 12
@@ -225,3 +240,4 @@ void ProcessMode0(UserEvent_t *ev){
   }
 
 }
+#endif

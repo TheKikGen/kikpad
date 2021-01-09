@@ -53,8 +53,9 @@ __ __| |           |  /_) |     ___|             |           |
 
 #include "kikpad.h"
 #include "usb_midi.h"
+#include "usb_midi_device.h"
 #include "ringbuffer.h"
-#include "rotary.h"
+#include "Rotary.h"
 #include <midiXparser.h>
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -133,7 +134,7 @@ const uint8_t KikGenLogo[] {
   WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,
   WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
   WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
+  WHITE,  BLUE ,  BLUE ,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
   WHITE,  BLUE ,  BLUE ,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
   WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
   WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
@@ -163,7 +164,11 @@ volatile uint16_t BtnScanStates[8][11] = {
 ///////////////////////////////////////////////////////////////////////////////
 // DO NOT REMOVE OR CHANGE THE ORDER !
 
-#include "mod_kikpadmode0.h"
+
+// Kikpad functionnal module.Uncomment only one.
+
+//#include "mod_kikpad_demo.h"
+#include "mod_kikpad_MPC.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 //  CORE FUNCTIONS
@@ -599,6 +604,28 @@ boolean PadIsPressed(uint8_t padIdx) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Set magic bootloader mode
+///////////////////////////////////////////////////////////////////////////////
+void BootLoaderMode()
+{
+   // Write the Magic word bootloader
+
+   RCC_BASE->APB1ENR |=  (RCC_APB1ENR_BKPEN | RCC_APB1ENR_PWREN) ;
+   // Enable write access to the backup registers and the RTC
+   PWR_BASE->CR |= PWR_CR_DBP;
+
+   // write register
+   BKP_BASE->BOOT_BTL_REGISTER = BOOT_BTL_MAGIC;
+
+   // Disable write
+   PWR_BASE->CR &= ~PWR_CR_DBP;
+   RCC_BASE->APB1ENR &=  ~(RCC_APB1ENR_BKPEN | RCC_APB1ENR_PWREN) ;
+
+   // Reset
+   nvic_sys_reset();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Process users events (pads & buttons + encoders)
 //-----------------------------------------------------------------------------
 // Events are stored in a queue (a ring buffer in fact)
@@ -606,70 +633,52 @@ boolean PadIsPressed(uint8_t padIdx) {
 ///////////////////////////////////////////////////////////////////////////////
 static void ProcessUserEvent(UserEvent_t *ev){
 
-    uint8_t idx = SCAN_IDX(ev->d1,ev->d2);
+  uint8_t idx = SCAN_IDX(ev->d1,ev->d2);
 
-    switch (ev->ev) {
+  switch (ev->ev) {
 
-      // Button pressed and not released
-      case EV_BTN_PRESSED:
-          // Reset
-          if ( idx == BT_SET && ButtonIsPressed(BT_MODE2) && ButtonIsPressed(BT_MS8) ) {
-              // All pads and buttons off
+    // Button pressed and not released
+    case EV_BTN_PRESSED:
+        // Reset
+        if ( idx == BT_SET  && ButtonIsPressed(BT_MODE2) ) {
+            // RESET = HOLD MODE2 & MASTER8 THEN PRESS SET
+            if (  ButtonIsPressed(BT_MS8) ) {
+              // All pads off
               PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
               delay(100);
               nvic_sys_reset();
-          }
+            } else
 
-        break;
-
+            // UPDATE = HOLD MODE2 & MASTER7 THEN PRESS SET
+            if (  ButtonIsPressed(BT_MS7) ) {
+              PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
+              delay(100);
+              BootLoaderMode(); // Do a reset
+            }
+        }
+      break;
     }
 
-    ProcessMode0(ev);
+    KikpadMod_ProcessUserEvent(ev);
 
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // MIDI USB Loop Process
 ///////////////////////////////////////////////////////////////////////////////
 static void USBMidi_Process()
 {
-  // Try to connect/reconnect USB if we detect a high level on USBDM
-	// This is to manage the case of a powered device without USB active or suspend mode for ex.
-  static unsigned long ledCxMillis = 0;
-  static unsigned long lastPacketMillis = 0;
 
+  // Retrieve from unconnected state or first call
 	if ( MidiUSB.isConnected() ) {
-    if ( !midiUSBCx) {
-        PadSetColor(0, BLUE);
-        midiUSBCx = true;
-    }
-
 
 		// Do we have a MIDI USB packet available ?
 		if ( MidiUSB.available() ) {
-        PadSetColor(0, GREEN);
 				midiPacket_t pk ;
 				pk.i = MidiUSB.readPacket();
-// Echo
-
+        KikpadMod_USBMidiParse(&pk);
 		}
 	}
-	// Are we physically connected to USB
-	else {
-        if ( midiUSBCx) {
-            PadSetColor(0, RED);
-            midiUSBCx = false;
-        }
-//LED_TurnOff(&LED_ConnectTick);
-
-
-  }
-
-	// if ( midiUSBIdle && !midiIthruActive && EE_Prm.ithruJackInMsk) {
-	// 		midiIthruActive = true;
-	// 		FlashAllLeds(0); // All leds when Midi intellithru mode active
-	// }
 
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -756,11 +765,16 @@ void setup() {
   PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0xFFFFFFFF;
 
   // Start USB Midi
+  usb_midi_set_vid_pid(USB_MIDI_VENDORID,USB_MIDI_PRODUCTID);
+	usb_midi_set_product_string(USB_MIDI_PRODUCT_STRING);
   MidiUSB.begin() ;
 
   //Serial.begin(115200);
 
-  delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
+  //delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
+
+  // Retrieve from unconnected state or first call
+	while (! MidiUSB.isConnected() ) delay(500);
 
   // All buttons Leds Off
   ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
@@ -768,6 +782,8 @@ void setup() {
   // Pads to black
   PadColorsBackground(BLACK);
 
+  // Initialize module
+  ProcessUserEvent((UserEvent_t *)NULL);
 
 }
 ///////////////////////////////////////////////////////////////////////////////
