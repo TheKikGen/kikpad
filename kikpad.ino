@@ -168,7 +168,10 @@ volatile uint16_t BtnScanStates[8][11] = {
 // Kikpad functionnal module.Uncomment only one.
 
 //#include "mod_kikpad_demo.h"
-#include "mod_kikpad_MPC.h"
+//#include "mod_kikpad_MPC.h"
+//#include "mod_kikpad_MPCClips.h"
+#include "mod_kikpad_MPCController.h"
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //  CORE FUNCTIONS
@@ -757,21 +760,15 @@ void setup() {
   UserEventsTim3.resume();
   RGBRefreshTim2.resume();
 
-//  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
-
-  memcpy(PadColorsCurrent,KikGenLogo,sizeof(PadColorsCurrent));
-  RGBMaskUpdateAll();
   // All Leds On
   PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0xFFFFFFFF;
 
+  // Show all colors
+  for (uint8_t i=0; i != 64 ; i ++ ) PadColorsCurrent[i]=i;
+  RGBMaskUpdateAll();
+
   // Start USB Midi
-  usb_midi_set_vid_pid(USB_MIDI_VENDORID,USB_MIDI_PRODUCTID);
-	usb_midi_set_product_string(USB_MIDI_PRODUCT_STRING);
   MidiUSB.begin() ;
-
-  //Serial.begin(115200);
-
-  //delay(4000); // Note : Usually around 4 s to fully detect USB Midi on the host
 
   // Retrieve from unconnected state or first call
 	while (! MidiUSB.isConnected() ) delay(500);
@@ -779,8 +776,10 @@ void setup() {
   // All buttons Leds Off
   ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
 
-  // Pads to black
-  PadColorsBackground(BLACK);
+  // Show our logo
+  memcpy(PadColorsCurrent,KikGenLogo,sizeof(PadColorsCurrent));
+  RGBMaskUpdateAll();
+  delay(1000);
 
   // Initialize module
   ProcessUserEvent((UserEvent_t *)NULL);
