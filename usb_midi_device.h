@@ -49,7 +49,6 @@ __ __| |           |  /_) |     ___|             |           |
 #define _USB_MIDI_DEVICE_H_
 #pragma once
 
-
 #include <libmaple/usb.h>
 #include <libmaple/nvic.h>
 #include <libmaple/delay.h>
@@ -101,7 +100,7 @@ uint8_t usb_midi_is_transmitting(void);
 // MIDI PORTS
 // --------------------------------------------------------------------------------------
 // To define the number of Midi ports, uncomment the right line below.
-#define USB_MIDI_4X4
+//#define USB_MIDI_4X4
 //#define USB_MIDI_8X8
 //#define USB_MIDI_12X12
 //#define USB_MIDI_16X16
@@ -118,10 +117,14 @@ uint8_t usb_midi_is_transmitting(void);
 #elif defined(USB_MIDI_4X4)
   #define USB_MIDI_IO_PORT_NUM  4
   #warning "4 USB midi ports defined"
-#else
+#elseif
   #define USB_MIDI_4X4
   #define USB_MIDI_IO_PORT_NUM  4
-  #warning "4 USB midi ports defined by default. Please check usb_midi_device.h"
+  #warning "4 USB midi ports defined"
+#else
+  #define USB_MIDI_2X2
+  #define USB_MIDI_IO_PORT_NUM  2
+  #warning "2 USB midi ports defined by default. Please check usb_midi_device.h"
 #endif
 
 // --------------------------------------------------------------------------------------
@@ -129,12 +132,10 @@ uint8_t usb_midi_is_transmitting(void);
 // --------------------------------------------------------------------------------------
 
 #define USB_MIDI_VENDORID            0x2912
-#define USB_MIDI_PRODUCTID           0x1970
-#define USB_MIDI_PRODUCT_STRING      "KIKPAD"
-#define USB_MIDI_PRODUCT_SERIAL      "KP000001"
+#define USB_MIDI_PRODUCTID           0x1975
+//#define USB_MIDI_PRODUCT_STRING      "KIKPAD"
 
-// String buffer Size in the descriptor without trailing zero.
-// The real buffer size is USB_MIDI_PRODUCT_STRING_SIZE*2 +2
+// String buffer max Size in the descriptor without tailing zero.
 #define USB_MIDI_PRODUCT_STRING_SIZE 30
 
 // --------------------------------------------------------------------------------------

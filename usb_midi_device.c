@@ -163,8 +163,10 @@ void (*usb_midi_ep_int_out[7])(void) =
 
 
 // --------------------------------------------------------------------------------------
-// DEVICE DESCRIPTOR MANIPULATION
+// DEVICE DESCRIPTOR MANIPULATION (IF NOT READ ONLY)
 // --------------------------------------------------------------------------------------
+
+#ifdef USB_MIDI_PRODUCT_STRING
 
 void usb_midi_set_vid_pid(uint16_t vid, uint16_t pid) {
   usbMIDIDescriptor_Device.idVendor           = vid;
@@ -178,9 +180,9 @@ void usb_midi_set_product_string(char stringDescriptor[]) {
   // in usb_midi_descriptor.c. It is critical !!!
 
   // fill the existing string descriptor with 0
-  memset(&usbMIDIDescriptor_iProduct.bString,0, (USB_MIDI_PRODUCT_STRING_SIZE)*2+2);
+  memset(&usbMIDIDescriptor_iProduct.bString,0, (USB_MIDI_PRODUCT_STRING_SIZE)*2);
 
-  // Copy string to the descriptor. The string must be zero ending !!!
+  // Copy string to the descriptor. The input string must be zero ending !!!
   uint8_t i = 0;
   while ( stringDescriptor[i] != 0 ) {
     // The string is wide characters type.  2 bytes / char.
@@ -193,6 +195,7 @@ void usb_midi_set_product_string(char stringDescriptor[]) {
   usbMIDIString_Descriptor[usbMIDIDescriptor_Device.iProduct].Descriptor_Size = i*2+2;
 }
 
+#endif
 // --------------------------------------------------------------------------------------
 // ENABLE / DISABLE / POWERDOWN   MIDI DEVICE
 // --------------------------------------------------------------------------------------
@@ -552,7 +555,7 @@ static uint8* usb_midi_GetConfigDescriptor(uint16_t length) {
 static uint8* usb_midi_GetStringDescriptor(uint16_t length) {
     uint8_t wValue0 = pInformation->USBwValue0;
 
-    if (wValue0 > USB_MIDI_N_STRING_DESCRIPTORS) {
+    if (wValue0 >= sizeof(usbMIDIString_Descriptor) ) {
         return NULL;
     }
     return Standard_GetDescriptorData(length, &usbMIDIString_Descriptor[wValue0]);
