@@ -57,10 +57,12 @@ __ __| |           |  /_) |     ___|             |           |
 #define MPC_QLINKS_FIRST_CC_NUMBER 100
 
 
-static boolean MPCPlaying = false;
-static uint8_t MPCBar  = 1;
-static uint8_t MPCBeat = 1;
-static uint8_t MPCTick = 0;
+static boolean  MPCPlaying = false;
+static boolean  MPCOverdub = false;
+static uint16_t MPCBar   = 0;
+static uint8_t  MPCBeat  = 0;
+static uint16_t MPCClock = 0;
+static uint8_t  MPCTick  = 0;
 static unsigned long  MPCSongPointerPos = 0;      // Song Pointer Position
 
 // 2 banks of 64 pads for Kikpad
@@ -78,6 +80,7 @@ static uint8_t KikpadEncodersBank = 0;
 static uint8_t KikpadEncodersVal[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 // Kipad MPC control affectations
+// 4 blocs returning all the same notes (but on a different midi channel)
 static const uint8_t KikpadPadsNotesMap[] = {
   12,13,14,15,12,13,14,15,
    8, 9,10,11, 8, 9,10,11,
@@ -101,32 +104,118 @@ static const int8_t KikpadPadsColors[] = {
   RED  ,RED  ,RED  ,RED  ,BLUE,BLUE,BLUE,BLUE,
 };
 
-// MPC Transport Buttons
-enum MPCTansportButtons {
-  PLAY,STOP,PLAY_START, STEP_BK, STEP_FWD, EVENT_BK, EVENT_FWD,
-  RECORD, RECORD_FROM_SEQ_START,OVERDUB,PUNCH_IN, TAP_TEMPO,
-  GLOBAL_AUTOMATION, TEMPO_SOURCE, MASTER_VOLUME, METRONOME_ENABLE,
-  TIME_CORRECT, SWING, RETRO_RECORD
+// MPC Buttons
+// We need to define that to map them in the software
+// Order defines the Note from 0 to N
+enum MPCButtons {
+  // Transport buttons
+  PLAY,
+  STOP,
+  PLAY_START,
+  STEP_BK,
+  STEP_FWD,
+  EVENT_BK,
+  EVENT_FWD,
+  RECORD,
+  RECORD_FROM_SEQ_START,
+  OVERDUB,
+  PUNCH_IN,
+  TAP_TEMPO,
+  GLOBAL_AUTOMATION,
+  TEMPO_SOURCE,
+  MASTER_VOLUME,
+  METRONOME_ENABLE,
+  TIME_CORRECT,
+  SWING,
+  RETRO_RECORD,
+  // Sequence parameters
+
 } ;
 
-///////////////////////////////////////////////////////////////////////////////
-// Clocked actions
-///////////////////////////////////////////////////////////////////////////////
+// Map a KIKPAD button to a MPC button, in the same order
+// as above.
 
+static const uint8_t MPCButtonsMap[] = {
+  // Transport buttons. 0xFF if unmapped
+ BT_RIGHT,   // PLAY
+ BT_DOWN,    // STOP
+ BT_LEFT,    // PLAY_START
+ 0XFF,       // STEP_BK
+ 0XFF,       // STEP_FWD
+ 0XFF,       // EVENT_BK
+ 0XFF,       // EVENT_FWD
+ 0XFF,       // RECORD
+ 0XFF,       // RECORD_FROM_SEQ_START
+ BT_UP,      // OVERDUB
+ 0XFF,       // PUNCH_IN
+ BT_CONTROL4,// TAP_TEMPO
+ 0XFF,       // GLOBAL_AUTOMATION
+ 0XFF,       // TEMPO_SOURCE
+ 0XFF,       // MASTER_VOLUME
+ 0XFF,       // METRONOME_ENABLE
+ 0XFF,       // TIME_CORRECT
+ 0XFF,       // SWING
+ 0XFF,       // RETRO_RECORD
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Get a MPC button value from a KikPad button
+// -1 if not found
+///////////////////////////////////////////////////////////////////////////////
+static int16_t MPCButtonGetMap(uint8_t btnValue) {
+  for ( uint8_t i = 0 ; i < sizeof(MPCButtonsMap) ; i++ ) {
+      if ( MPCButtonsMap[i] == 0xFF ) continue;
+      if ( btnValue == MPCButtonsMap[i] ) return i;
+  }
+  return -1;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Midi clocked actions
+///////////////////////////////////////////////////////////////////////////////
 static void MPCClockEvent() {
 
   if (MPCPlaying) {
-    MPCTick++;
-    if ( MPCTick % 6  == 0 ) MPCSongPointerPos++;
-    if ( MPCTick == 12 ) ButtonSetLed(BT_VOLUME, OFF);
 
-    // Beat
-    if ( MPCTick == 24 ) {
-        MPCTick = 0 ;
-        ButtonSetLed(BT_VOLUME, ON);
-      }
+    MPCClock++;
+    MPCTick  = MPCClock % 24;
+    MPCBeat  = (MPCClock / 24 ) %  4 ;
+    MPCBar   = MPCClock / 24 / 4 ;
+
+    // Show beat
+    if ( MPCTick == 1 ) {
+      ButtonSetLed(MPCButtonsMap[PLAY], ON);
+      ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
+      if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+    }
+    else if ( MPCTick == 6 ) {
+      ButtonSetLed(MPCButtonsMap[PLAY], OFF);
+      ButtonSetLed(MPCButtonsMap[TAP_TEMPO], OFF);
+      if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB], OFF);
+    }
+
+    // Show bars
+    uint8_t b = MPCBar % 4;
+    if ( b == 0 ) {
+      ButtonSetLed(BT_MS4, OFF);
+      ButtonSetLed(BT_MS1, ON);
+    }
+    else {
+      ButtonSetLed(BT_MS1 + b - 1, OFF);
+      ButtonSetLed(BT_MS1 + b, ON);
+    }
+
+  } else {
+    // Clock received but not currently playing. Only show beat
+    MPCTick  = ++MPCTick % 24;
+    // Show beat
+    if ( MPCTick == 1 ) {
+      ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
+    }
+    else if ( MPCTick == 6 ) {
+      ButtonSetLed(MPCButtonsMap[TAP_TEMPO], OFF);
+    }
   }
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -147,25 +236,31 @@ void KikpadMod_USBMidiParse(midiPacket_t *pk)
       // Start
       case 0xFA:
         MPCPlaying = true;
-        MPCTick = 0;
-        MPCSongPointerPos = 0;      // Song Pointer Position
-        ButtonSetLed(BT_RIGHT, ON);
-        ButtonSetLed(BT_DOWN, OFF);
+        MPCClock = 0 ;
+        ButtonSetLed(MPCButtonsMap[STOP], ON);
 
         break;
 
       // Continue
       case 0xFB:
         MPCPlaying = true;
-        ButtonSetLed(BT_RIGHT, ON);
-        ButtonSetLed(BT_DOWN, OFF);
+        ButtonSetLed(MPCButtonsMap[STOP], ON);
+
         break;
 
       // Stop
       case 0xFC:
         MPCPlaying = false;
-        ButtonSetLed(BT_RIGHT, OFF);
-        ButtonSetLed(BT_DOWN, ON);
+        ButtonSetLed(MPCButtonsMap[PLAY], ON);
+        ButtonSetLed(MPCButtonsMap[STOP], OFF);
+        ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
+        ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+
+        break;
+
+      // Song pointer position
+      case 0xF2:
+        MPCClock = ((pk->packet[3] << 7) | pk->packet[2]) * 6;
         break;
     }
   }
@@ -186,20 +281,8 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
   static uint8_t lastEventId  = EV_NONE;
   static uint8_t lastEventIdx = 0;
 
-  static boolean setupMode = true;
-
-  midiPacket_t pk;
-
-  if (setupMode ) {
-      setupMode = false;
-      ButtonsLedStates[1] = BTMSK_MS1 ;
-      PadColorsBackground(BLACK);
-      memcpy(PadColorsCurrent,KikpadPadsColors,sizeof(KikpadPadsColors));
-      RGBMaskUpdateAll();
-      // Sitch ON all led (without changing colors)
-      PadLedStates[0] = PadLedStates[1] = 0XFFFFFFFF ;
-      if ( !ev ) return;
-  }
+  // midi packet. Static to keep last packet in memory.
+  static midiPacket_t pk = { .i = 0 };
 
   uint8_t idx = SCAN_IDX(ev->d1,ev->d2);
 
@@ -218,7 +301,7 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
         break;
       }
 
-    // Encoders Counter Clock wise
+    // Encoders Counter Clock wise (turn left)
     case EV_EC_CCW:
       {
         uint8_t i = idx + ( KikpadEncodersBank ? 8 : 0 ) ;
@@ -270,19 +353,10 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
     case EV_BTN_PRESSED:
     case EV_BTN_RELEASED:
       {
-        boolean send = true;
-        uint8_t value = 0 ;
-
-        ButtonSetLed(idx, ( ev->ev == EV_BTN_PRESSED ? ON:OFF) );
-
-        if      ( idx == BT_UP )    value = OVERDUB;
-        else if ( idx == BT_DOWN )  value = STOP;
-        else if ( idx == BT_LEFT )  value = PLAY_START;
-        else if ( idx == BT_RIGHT ) value = PLAY ;
-        else send = false;
-
-        // Send Button midi message
-        if ( send ) {
+        // Is that button mapped to a MPC one ?
+        int16_t value = MPCButtonGetMap(idx);
+        if ( value  >= 0 ) {
+          // Send Button midi message
           pk.packet[2] = value;
           pk.packet[3] = 0x40;
 
@@ -294,15 +368,42 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
             // Note off
             pk.packet[0] = 0x08 ;
             pk.packet[1] = 0x80 + MPC_BUTTON_MIDI_CHANNEL ;
+
+            // Specific button released cases
+            switch (value) {
+              // Toggle Overdub
+              case OVERDUB:
+                  MPCOverdub = !MPCOverdub;
+                  ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+                  break;
+            }
           }
           MidiUSB.writePacket(&pk.i);
         }
+        else {
+          // Kikpad Internal buttons
+
+          // VOLUME. Encoders bank select.
+          // Lock = SET + VOLUME
+          if ( idx == BT_VOLUME ) {
+            // 2 encoders banks 0-1. Light Volume if Bank 1 set.
+            if ( ev->ev == EV_BTN_PRESSED  ) KikpadEncodersBank = 1;
+            // Released : check if we must lock the mode
+            else KikpadEncodersBank = ( ButtonIsPressed(BT_SET) ? 1:0 );
+
+            ButtonSetLed(BT_VOLUME, KikpadEncodersBank);
+          }
+
+        }
+        //ButtonSetLed(idx, ev->ev == EV_BTN_PRESSED ? ON:OFF );
+
       }
 
       break;
 
     // Button pressed and holded more than 2s
     case EV_BTN_HOLDED:
+
 
       break;
 
@@ -313,4 +414,27 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
   lastEventIdx = idx;
 
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Kikpad module setup
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadMod_Setup() {
+
+  // Colors of pads
+  memcpy(PadColorsCurrent,KikpadPadsColors,sizeof(KikpadPadsColors));
+  RGBMaskUpdateAll();
+
+  // Default ON buttons at start
+  ButtonSetLed(MPCButtonsMap[PLAY_START], ON);
+  ButtonSetLed(MPCButtonsMap[PLAY], ON);
+  ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
+  ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+}
+///////////////////////////////////////////////////////////////////////////////
+// Kikpad module loop
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadMod_Loop() {
+
+}
+
 #endif
