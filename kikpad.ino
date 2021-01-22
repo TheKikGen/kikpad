@@ -155,7 +155,8 @@ volatile uint16_t BtnScanStates[8][11] = {
           {0,0,0,0,0,0,0,0,0,0,0},
           {0,0,0,0,0,0,0,0,0,0,0},
           {0,0,0,0,0,0,0,0,0,0,0},
-                           };
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 //  CODE MODULES
 //-----------------------------------------------------------------------------
@@ -308,7 +309,7 @@ static void WriteDMC(uint32_t mask) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Operater the LS138 BRG colors LED multiplexer and buttons LEDs
+// Operate the LS138 BRG colors LED multiplexer and buttons LEDs
 //-----------------------------------------------------------------------------
 // 8 address can be set :
 // . 0-2 are used by higher pads, respectively for colors Blue, Red, Green
@@ -413,7 +414,7 @@ void RGBTim2Handler() {
 // CRTICAL ISR - TIMER3. USed for encoders and buttons scan lines
 //-----------------------------------------------------------------------------
 // Encoders are multiplexed with an LS138 (8 address for 8 encoders), so
-// keeping encdoders reactives id a bit tricky.
+// keeping encoders reactives is a bit tricky.
 // Buttons scan lines : 8 rows / 11 columns.
 // Pads are 0,0 - 0,7
 // Columns 8,9, 10 are buttons right, bottom, left
@@ -578,7 +579,7 @@ void ButtonSetLed(uint8_t bt,uint8_t state) {
 // Get the led state ON/OFF of a button
 ///////////////////////////////////////////////////////////////////////////////
 uint8_t ButtonGetLed(uint8_t bt) {
-  if (bt >= BT_NB_MAX ) return 0;
+  if (bt >= BT_NB_MAX ) return OFF;
 
   return (ButtonsLedStates[ButtonLedBankMap[bt]] & ButtonLedBankMsk[bt] ? ON:OFF);
 
@@ -588,7 +589,7 @@ uint8_t ButtonGetLed(uint8_t bt) {
 // Get the current pressed state of a button (not a pad !)
 ///////////////////////////////////////////////////////////////////////////////
 boolean ButtonIsPressed(uint8_t bt) {
-  if (bt >= BT_NB_MAX ) return 0;
+  if (bt >= BT_NB_MAX ) return false;
   // r and c are inversed in the scan array
   uint8_t r = bt/8 ;
   uint8_t c = bt - 8*r ;
@@ -599,7 +600,7 @@ boolean ButtonIsPressed(uint8_t bt) {
 // Get the current pressed state of a pad (not a button !)
 ///////////////////////////////////////////////////////////////////////////////
 boolean PadIsPressed(uint8_t padIdx) {
-  if (padIdx >= PAD_SIZE ) return 0;
+  if (padIdx >= PAD_SIZE ) return false;
   // r and c are inversed in the scan array
   uint8_t r = padIdx/8 ;
   uint8_t c = padIdx - 8*r ;
@@ -782,7 +783,7 @@ void setup() {
   delay(1000);
 
   // Initialize module
-  ProcessUserEvent((UserEvent_t *)NULL);
+  KikpadMod_Setup();
 
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -796,5 +797,7 @@ void loop() {
     UserEventQueue.readBytes((uint8_t *)&ev,sizeof(UserEvent_t));
     ProcessUserEvent(&ev);
   }
+
+  KikpadMod_Loop();
 
 }
