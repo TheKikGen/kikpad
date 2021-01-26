@@ -337,9 +337,9 @@ static void KikpadClipStopAll() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Change Len of a clip
+// Change Len of a clip. Return len if done.
 ///////////////////////////////////////////////////////////////////////////////
-static void KikpadClipChangeLen(uint8_t idx) {
+static uint8_t KikpadClipChangeLen(uint8_t idx) {
 
   // Change length if MS-1 MS-4 pressed
   // That will reset position at the next bar
@@ -349,9 +349,11 @@ static void KikpadClipChangeLen(uint8_t idx) {
       KikpadClip[idx].lenBar = i + 1 ;
       KikpadClip[i].countBar = 0 ;
       ShowClipLen(KikpadClip[idx].lenBar) ;
-      return;
+      return KikpadClip[idx].lenBar;
     }
   }
+
+  return  0;
 
 }
 
@@ -361,6 +363,8 @@ static void KikpadClipChangeLen(uint8_t idx) {
 static void KikpadClipsNoteOff() {
   // Last tick/beat before a new bar : we need to send clip note off here
   // to avoid notes overlap at the beggining of a new bar
+  // Mute doesn't wait end of clip
+
   for ( int8_t i = KikpadClipMaxIdx ; i >= KikpadClipMinIdx ; i --) {
         if ( KikpadClip[i].state == CLIP_SYNC_MUTE
               || ( !KikpadClip[i].countBar && KikpadClip[i].state == CLIP_SYNC_PLAY) ) {
@@ -429,7 +433,7 @@ static void KikpadClipEvStateMachine(uint8_t ev,uint8_t idx) {
 
       // Change length eventually if MS-1 MS-4 pressed
       // That will reset position at the next bar
-      KikpadClipChangeLen(idx);
+      if ( KikpadClipChangeLen(idx) ) return ;
 
       // Clear a clip if MODE1 Holded
       // Will send a note off immediatly
