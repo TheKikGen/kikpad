@@ -42,6 +42,20 @@ __ __| |           |  /_) |     ___|             |           |
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+
+////////////////////////////////////////////////////////////////////////////////
+// KIKPAD CLIP LAUNCHER FUNCTION KEYS
+//------------------------------------------------------------------------------
+// RESET                       = HOLD BT_CONTROL4 & MASTER8 THEN PRESS SET
+// BOOTLOADER MODE             = HOLD BT_CONTROL4 & MASTER7 THEN PRESS SET
+// CLIP                        = TOGGLE CLIP MODE. MIDI NOTE ON/OFF ONLY WHEN OFF
+// VOLUME HOLDED + ENCODER     = UPPER ENCODER BANK 8-16 (SHIFT)
+// SET + VOLUME PRESSED        = LOCK ENCODER BANK 8-16
+// MASTER 1-4 + PAD PRESSED    = CHANGE CLIP LENGTH 1 - 2 - 3 - 4
+// MODE1 HOLDED + PAD PRESSED  = CLEAR CLIP
+// MODE1 HOLDED + MOD2 HOLDED  = CLEAR ALL CLIPS
+////////////////////////////////////////////////////////////////////////////////
+
 // KIKPAD_MPC : Advanced MPC midi controller
 
 #ifndef _KIKPAD_MODULE_H_
@@ -81,6 +95,7 @@ static uint8_t  MPCTick  = 0;
 
 // True if clip mode active
 static boolean  KikpadModeClip = true;
+
 // Max Clip bar
 static uint8_t KikpadClipMaxBarLen = 4;
 
@@ -113,14 +128,14 @@ static const uint8_t KikpadPadsNotesMap[] = {
 
 // Corresponding colors
 static const int8_t KikpadPadsColors[] = {
-  GREEN,GREEN,GREEN,GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
-  GREEN,GREEN,GREEN,GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
-  GREEN,GREEN,GREEN,GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
-  GREEN,GREEN,GREEN,GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
-  RED  ,RED  ,RED  ,RED  ,BLUE,BLUE,BLUE,BLUE,
-  RED  ,RED  ,RED  ,RED  ,BLUE,BLUE,BLUE,BLUE,
-  RED  ,RED  ,RED  ,RED  ,BLUE,BLUE,BLUE,BLUE,
-  RED  ,RED  ,RED  ,RED  ,BLUE,BLUE,BLUE,BLUE,
+  LT_GREEN,LT_GREEN,LT_GREEN,LT_GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
+  LT_GREEN,LT_GREEN,LT_GREEN,LT_GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
+  LT_GREEN,LT_GREEN,LT_GREEN,LT_GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
+  LT_GREEN,LT_GREEN,LT_GREEN,LT_GREEN,MAGENTA,MAGENTA,MAGENTA,MAGENTA,
+  LT_RED  ,LT_RED  ,LT_RED  ,LT_RED  ,BLUE,BLUE,BLUE,BLUE,
+  LT_RED  ,LT_RED  ,LT_RED  ,LT_RED  ,BLUE,BLUE,BLUE,BLUE,
+  LT_RED  ,LT_RED  ,LT_RED  ,LT_RED  ,BLUE,BLUE,BLUE,BLUE,
+  LT_RED  ,LT_RED  ,LT_RED  ,LT_RED  ,BLUE,BLUE,BLUE,BLUE,
 };
 
 // MPC Buttons
@@ -177,12 +192,19 @@ static const uint8_t MPCButtonsMap[] = {
  0XFF,       // RETRO_RECORD
 };
 
-enum ClipStatus {
+enum ClipStates {
   CLIP_EMPTY,
-  CLIP_STOPPED,
-  CLIP_END_PLAYING,
-  CLIP_PLAYING,
-  CLIP_RECORDING,
+  CLIP_MUTED,
+  CLIP_SYNC_MUTE,
+  CLIP_SYNC_PLAY,
+  CLIP_SYNC_REC,
+};
+
+enum ClipStatesColors {
+  CLIP_COL_READY = WHITE,
+  CLIP_COL_PLAY  = GREEN,
+  CLIP_COL_RECORD = RED,
+  CLIP_COL_PENDING = ORANGE,
 };
 
 // Pad clips
@@ -209,11 +231,25 @@ static int16_t MPCButtonGetMap(uint8_t btnValue) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Show Clip len on the Master led bar
+///////////////////////////////////////////////////////////////////////////////
+static void ShowClipLen(uint len) {
+
+  ButtonsBarSetLedMsk(BT_BAR_MASTER,0);
+  for (uint8_t i = 0 ; i < len ; i ++ ) ButtonSetLed(BT_MS1 + i  , ON);
+
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
 // Show Current MPC Bar on the Master 1-8 buttons.
 ///////////////////////////////////////////////////////////////////////////////
 static void ShowCurrentMPCBar() {
+
+  // Preserve existing leds ON
   ButtonsBarSetLedMsk(BT_BAR_MASTER,0);
   ButtonSetLed(BT_MS1 + MPCBar  , ON);
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -254,6 +290,21 @@ static void MPCClockEvent() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Clear a Kikpad clip
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadClipClear(uint8_t idx) {
+
+  KikpadClip[idx].state = CLIP_EMPTY ;
+  KikpadClip[idx].lenBar = 0;
+  KikpadClip[idx].countBar = 0 ;
+  if ( KikpadClipMaxIdx && idx == KikpadClipMaxIdx ) KikpadClipMaxIdx-- ;
+  if ( KikpadClipMinIdx != KikpadClipMaxIdx && idx == KikpadClipMinIdx ) KikpadClipMinIdx++ ;
+  KikpadPadSendNote(idx,false); // Note OFF
+  PadSetColor(idx,KikpadPadsColors[idx]);
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Kikpad reset all clips
 ///////////////////////////////////////////////////////////////////////////////
 static void KikpadClipResetAll() {
@@ -262,25 +313,45 @@ static void KikpadClipResetAll() {
     KikpadClip[i].state = CLIP_EMPTY ;
     KikpadClip[i].lenBar = 0;
     KikpadClip[i].countBar = 0 ;
+    KikpadPadSendNote(i,false); // Note OFF
   }
   KikpadClipMaxIdx = 0;
   KikpadClipMinIdx = PAD_SIZE ;
+  memcpy(PadColorsCurrent,KikpadPadsColors,sizeof(KikpadPadsColors));
+  RGBMaskUpdateAll();
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Kikpad stop all clips
+// Kikpad stop all clips but keep clip length
 ///////////////////////////////////////////////////////////////////////////////
 static void KikpadClipStopAll() {
 
-  for (uint8_t i = 0 ; i < PAD_SIZE ; i++ ) {
-    KikpadPadSendNote(i,false); // Note OFF
-    KikpadClip[i].countBar = 0 ;
-    KikpadClip[i].state = CLIP_STOPPED;
+  for ( int8_t i = KikpadClipMaxIdx ; i >= KikpadClipMinIdx ; i --) {
+    if ( KikpadClip[i].state == CLIP_SYNC_PLAY ) {
+      KikpadPadSendNote(i,false); // Note OFF
+      //KikpadClip[i].state = CLIP_STOPPED;
+      PadSetColor(i,CLIP_COL_PENDING);
+    }
   }
-  memcpy(PadColorsCurrent,KikpadPadsColors,sizeof(KikpadPadsColors));
-  RGBMaskUpdateAll();
-  KikpadClipMaxIdx = 0 ;
-  KikpadClipMinIdx = PAD_SIZE ;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Change Len of a clip
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadClipChangeLen(uint8_t idx) {
+
+  // Change length if MS-1 MS-4 pressed
+  // That will reset position at the next bar
+  for ( uint8_t i = 0 ; i < KikpadClipMaxBarLen ; i++ ) {
+    if ( ButtonIsPressed( BT_MS1 + i ) ) {
+      PadSetColor(idx, CLIP_COL_PENDING);
+      KikpadClip[idx].lenBar = i + 1 ;
+      KikpadClip[i].countBar = 0 ;
+      ShowClipLen(KikpadClip[idx].lenBar) ;
+      return;
+    }
+  }
 
 }
 
@@ -291,8 +362,8 @@ static void KikpadClipsNoteOff() {
   // Last tick/beat before a new bar : we need to send clip note off here
   // to avoid notes overlap at the beggining of a new bar
   for ( int8_t i = KikpadClipMaxIdx ; i >= KikpadClipMinIdx ; i --) {
-        if ( !KikpadClip[i].countBar &&
-              (KikpadClip[i].state == CLIP_END_PLAYING || KikpadClip[i].state == CLIP_PLAYING) ) {
+        if ( KikpadClip[i].state == CLIP_SYNC_MUTE
+              || ( !KikpadClip[i].countBar && KikpadClip[i].state == CLIP_SYNC_PLAY) ) {
 
                 KikpadPadSendNote(i,false); // Note OFF
         }
@@ -309,35 +380,37 @@ static void KikpadClipSeqStateMachine() {
     switch (KikpadClip[i].state) {
 
       case CLIP_EMPTY:
-      case CLIP_STOPPED:
           break;
 
-      case CLIP_PLAYING:
-          if ( ! KikpadClip[i].countBar )  {
-            KikpadClip[i].countBar = KikpadClip[i].lenBar - 1;
-            PadSetColor(i, CYAN );
-  //          KikpadPadSendNote(i,false); // Note OFF
+      case CLIP_MUTED:
+          break;
+
+      case CLIP_SYNC_PLAY:
+          if ( KikpadClip[i].countBar++ == 0 )  {
+            PadSetColor(i, CLIP_COL_PLAY );
             KikpadPadSendNote(i,true,KikpadPadVelocity );
+            //KikpadClip[i].countBar = KikpadClip[i].lenBar - 1;
           }
-          else KikpadClip[i].countBar-- ;
+          if ( KikpadClip[i].countBar == KikpadClip[i].lenBar ) {
+            KikpadClip[i].countBar = 0;
+          }
           break;
 
-      case CLIP_END_PLAYING:
+      case CLIP_SYNC_MUTE:
           KikpadClip[i].countBar = 0 ;
-          KikpadClip[i].state = CLIP_STOPPED ;
+          KikpadClip[i].state = CLIP_MUTED ;
           PadSetColor(i, KikpadPadsColors[i]);
-    //      KikpadPadSendNote(i,false); // Note OFF
           break;
 
-      case CLIP_RECORDING:
+      case CLIP_SYNC_REC:
           if ( KikpadClip[i].lenBar++ == 0 ) {
-  //          KikpadPadSendNote(i,false); // Note OFF
-            KikpadPadSendNote(i,true,KikpadPadVelocity); // Note ON
-            PadSetColor(i, YELLOW);
+            KikpadPadSendNote(i,true,KikpadPadVelocity);
+            PadSetColor(i, CLIP_COL_RECORD);
           }
           else if ( KikpadClip[i].lenBar == KikpadClipMaxBarLen ) {
             // Max length. Stop recording
-            KikpadClip[i].state = CLIP_PLAYING ;
+            PadSetColor(i, CLIP_COL_PENDING);
+            KikpadClip[i].state = CLIP_SYNC_PLAY ;
           }
           break;
     }
@@ -351,37 +424,61 @@ static void KikpadClipEvStateMachine(uint8_t ev,uint8_t idx) {
 
   if ( ev == EV_PAD_PRESSED ) {
 
-    PadSetColor(idx, WHITE);
+    if ( KikpadClip[idx].state != CLIP_EMPTY ) {
+      // Specific clip actions
 
-    switch (KikpadClip[idx].state) {
+      // Change length eventually if MS-1 MS-4 pressed
+      // That will reset position at the next bar
+      KikpadClipChangeLen(idx);
 
-      case CLIP_EMPTY:
+      // Clear a clip if MODE1 Holded
+      // Will send a note off immediatly
+      if ( ButtonIsHolded(BT_MODE1) ) {
+          KikpadClipClear(idx);
+          return;
+      }
 
-        // seq Loop lazy optimization
-        KikpadClipMaxIdx = ( idx > KikpadClipMaxIdx ? idx : KikpadClipMaxIdx );
-        KikpadClipMinIdx = ( idx < KikpadClipMinIdx ? idx : KikpadClipMinIdx );
+      // Start a clip if stopped
+      if ( KikpadClip[idx].state == CLIP_MUTED ) {
+        PadSetColor(idx, CLIP_COL_PENDING);
+        KikpadClip[idx].state = CLIP_SYNC_PLAY;
+      }
+      else
 
-        KikpadClip[idx].state = CLIP_RECORDING ;
-        break;
+      // Stop a clip if playing
+      if ( KikpadClip[idx].state ==  CLIP_SYNC_PLAY ) {
+        PadSetColor(idx, CLIP_COL_PENDING);
+        KikpadClip[idx].state = CLIP_SYNC_MUTE;
+      }
 
-      case CLIP_STOPPED:
-        // Pad pressed = start clip
-        KikpadClip[idx].state = CLIP_PLAYING;
-        break;
 
-      case CLIP_PLAYING:
-        KikpadClip[idx].state = CLIP_END_PLAYING;
-        break;
+    }
+    // Clip empty
+    else {
+
+      // Record clip
+      PadSetColor(idx, CLIP_COL_PENDING);
+
+      // seq Loop lazy optimization
+      if ( idx > KikpadClipMaxIdx ) KikpadClipMaxIdx = idx ;
+      if ( idx < KikpadClipMinIdx)  KikpadClipMinIdx = idx ;
+
+      KikpadClip[idx].state = CLIP_SYNC_REC ;
+
     }
   }
-  else if ( ev == EV_PAD_RELEASED ){
+  else
+  if ( ev == EV_PAD_RELEASED ){
     // PAD RELEASED
     switch (KikpadClip[idx].state) {
 
-      case CLIP_RECORDING:
+      case CLIP_SYNC_REC:
+        // Create a clip with a fixed length eventually if MS-1 MS-4 pressed
+        KikpadClipChangeLen(idx);
+
         // Check if record stopped before the next bar...
         if ( KikpadClip[idx].lenBar == 0 ) KikpadClip[idx].lenBar = 1;
-        KikpadClip[idx].state = CLIP_PLAYING;
+        KikpadClip[idx].state = CLIP_SYNC_PLAY;
         break;
     }
 
@@ -523,8 +620,6 @@ static void KikpadPadSendNote(uint8_t idx,boolean noteOn,uint8_t velocity) {
   MidiUSB.writePacket(&pk.i);
 }
 
-
-
 ///////////////////////////////////////////////////////////////////////////////
 // PARSE A RECEIVED USER EVENT
 ///////////////////////////////////////////////////////////////////////////////
@@ -636,6 +731,10 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
     // Button pressed and holded more than 2s
     case EV_BTN_HOLDED:
 
+          // Clear all clips in clip mode - HOLD MODE1 THEN HOLD MODE 2
+          if ( KikpadModeClip && idx == BT_MODE2 && ButtonIsHolded(BT_MODE1) ) {
+              KikpadClipResetAll();
+          }
 
       break;
 
@@ -652,15 +751,13 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 ///////////////////////////////////////////////////////////////////////////////
 void KikpadMod_Setup() {
 
-  // Colors of pads
-  memcpy(PadColorsCurrent,KikpadPadsColors,sizeof(KikpadPadsColors));
-  RGBMaskUpdateAll();
+
+  // Reset all clips
+  KikpadClipResetAll();
 
   // Default ON buttons at start
   InitModesBarLeds();
 
-  // Reset all clips
-  KikpadClipResetAll();
 
 }
 ///////////////////////////////////////////////////////////////////////////////
