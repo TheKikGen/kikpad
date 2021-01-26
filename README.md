@@ -10,10 +10,14 @@ KiKPad : the Midiplus SmartPad reinvented !
 
 We did it again ! 
 
-The KikGen Labs proposes again a firmware entirely rewritten for a commercial product.  This time it is the **Smartpad** from Midiplus, which technical characteristics being very close to the Launchpad from Novation.  
+The KikGen Labs proposes again a firmware entirely rewritten for a commercial product.  This time it is the **Smartpad** from Midiplus, which technical characteristics being very close to the Launchpad from Novation. That firmware allows now 64 pads, 64 RGB colors (instead 3  !), 8 encoders, all buttons operationals, and obviously usb midin in/out.  It was written with the stm32duino platform, for the STM32F1 uC family. 
 
-At this stage, the firmware is an advanced prototype, developed with stm32duino,  with all pads, 64 RGB colors, encoders, buttons operationals, including midi.   
-The perspectives offered by this new firmware are vast: fully customized Ableton Live controller, chord generator, autonomous sequencer, master keyboard , etc....
+The perspectives offered by this new open firmware are vast: fully customized Ableton Live controller, chord generator, autonomous sequencer, master keyboard , etc....For example, I have developped an Akai Surface controller emulation for the MPC Live, allowing my Kikpad to be used as it was the native hardware.
+
+[![tkglctrl video](https://img.youtube.com/vi/PQ-h3_DM6EI/0.jpg)](https://www.youtube.com/watch?v=PQ-h3_DM6EI)
+
+
+For a quick start, you can check the "demo" module, transforming the Kikpad in a small midi keyboard and controller. 
 
 I want to thank here DerFetzer for his similar project (developed in Rust) and the inspiration for the launch of this project realized under "lockdown " !  have a look here : https://github.com/DerFetzer/open-cleverpad
 
