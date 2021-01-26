@@ -245,7 +245,9 @@ void PadSetLed(uint8_t padIdx,uint8_t state);
 void ButtonSetLed(uint8_t bt,uint8_t state);
 uint8_t ButtonGetLed(uint8_t bt);
 void ButtonsBarSetLedMsk(uint8_t btBar,uint32_t bitMsk);
+uint32_t ButtonsBarGetLedMsk(uint8_t btBar);
 boolean ButtonIsPressed(uint8_t bt);
+boolean ButtonIsHolded(uint8_t bt);
 boolean PadIsPressed(uint8_t padIdx);
 
 #endif

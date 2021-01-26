@@ -42,6 +42,13 @@ __ __| |           |  /_) |     ___|             |           |
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+////////////////////////////////////////////////////////////////////////////////
+// KIKPAD SYSTEM KEYS
+//------------------------------------------------------------------------------
+// RESET             = HOLD BT_CONTROL4 & MASTER8 THEN PRESS SET
+// BOOTLOADER MODE   = HOLD BT_CONTROL4 & MASTER7 THEN PRESS SET
+////////////////////////////////////////////////////////////////////////////////
+
 #include <string.h>
 #include <stdarg.h>
 
@@ -601,6 +608,19 @@ void ButtonsBarSetLedMsk(uint8_t btBar,uint32_t bitsMsk) {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Get a buttons bar mask
+///////////////////////////////////////////////////////////////////////////////
+uint32_t ButtonsBarGetLedMsk(uint8_t btBar) {
+
+  if (btBar == BT_BAR_MASTER ) {
+    return ButtonsLedStates[1] ;
+  }
+  else if ( btBar == BT_BAR_MODES || btBar == BT_BAR_CONTROLS) {
+    return ButtonsLedStates[0] ;
+  }
+  return 0;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Get the current pressed state of a button (not a pad !)
@@ -611,6 +631,17 @@ boolean ButtonIsPressed(uint8_t bt) {
   uint8_t r = bt/8 ;
   uint8_t c = bt - 8*r ;
   return ( BtnScanStates[c][r+8] ? true:false );
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Get the current holded state of a button (not a pad !)
+///////////////////////////////////////////////////////////////////////////////
+boolean ButtonIsHolded(uint8_t bt) {
+  if (bt >= BT_NB_MAX ) return false;
+  // r and c are inversed in the scan array
+  uint8_t r = bt/8 ;
+  uint8_t c = bt - 8*r ;
+  return ( BtnScanStates[c][r+8] > BT_HOLD_THRESHOLD ? true:false );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -661,14 +692,15 @@ static void ProcessUserEvent(UserEvent_t *ev){
     // Button pressed and not released
     case EV_BTN_PRESSED:
         // Reset
-        if ( idx == BT_SET  && ButtonIsPressed(BT_MODE2) ) {
-            // RESET = HOLD MODE2 & MASTER8 THEN PRESS SET
+        if ( idx == BT_SET  && ButtonIsPressed(BT_CONTROL4) ) {
+            // RESET = HOLD BT_CONTROL4 & MASTER8 THEN PRESS SET
             if (  ButtonIsPressed(BT_MS8) ) {
               // All pads off
               PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
               delay(100);
               nvic_sys_reset();
-            } else
+            }
+            else
 
             // UPDATE = HOLD MODE2 & MASTER7 THEN PRESS SET
             if (  ButtonIsPressed(BT_MS7) ) {
