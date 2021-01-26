@@ -125,14 +125,17 @@ enum {
 
 // 8 Colors RGB enum
 typedef enum {
-  BLACK   = 0B000,
-  RED     = 0B100,
-  GREEN   = 0B010,
-  BLUE    = 0B001,
-  YELLOW  = 0B110,
-  MAGENTA = 0B101,
-  CYAN    = 0B011,
-  WHITE   = 0B111
+  BLACK    = 0B000000,
+  BLUE     = 0B000001,
+  GREEN    = 0B000010,
+  CYAN     = 0B000011,
+  RED      = 0B000100,
+  MAGENTA  = 0B000101,
+  YELLOW   = 0B000110,
+  WHITE    = 0B000111,
+  ORANGE   = 52,
+  LT_RED   = 32,
+  LT_GREEN = 50,
 } ledColor_t;
 
 enum {
@@ -175,7 +178,12 @@ enum {
   BTMSK_MS8      = 0B00000001000000000000000000000000,
 } ButtonLedBankMaskEnum;
 
-
+// Buttons bar names
+enum {
+BT_BAR_MASTER,
+BT_BAR_MODES,
+BT_BAR_CONTROLS,
+} ButtonsBarNames;
 
 // Events names for buttons (pads are managed differently)
 enum {
@@ -236,6 +244,7 @@ void PadColorsRow(uint8_t mode, uint8_t padIdx,uint8_t color);
 void PadSetLed(uint8_t padIdx,uint8_t state);
 void ButtonSetLed(uint8_t bt,uint8_t state);
 uint8_t ButtonGetLed(uint8_t bt);
+void ButtonsBarSetLedMsk(uint8_t btBar,uint32_t bitMsk);
 boolean ButtonIsPressed(uint8_t bt);
 boolean PadIsPressed(uint8_t padIdx);
 

@@ -132,12 +132,12 @@ uint8_t PadColorsCurrent[] {
 
 const uint8_t KikGenLogo[] {
   WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
-  WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  BLUE ,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  BLUE ,  BLUE ,  WHITE,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,
-  WHITE,  BLUE ,  WHITE,  WHITE,  WHITE,  BLUE ,  WHITE,  WHITE,
+  WHITE,  BLUE ,  ORANGE, ORANGE, ORANGE, BLUE ,  ORANGE, WHITE,
+  WHITE,  BLUE ,  ORANGE, ORANGE, BLUE ,  ORANGE, ORANGE, WHITE,
+  WHITE,  BLUE ,  BLUE ,  BLUE ,  ORANGE, ORANGE, ORANGE, WHITE,
+  WHITE,  BLUE ,  BLUE ,  BLUE ,  ORANGE, ORANGE, ORANGE, WHITE,
+  WHITE,  BLUE ,  ORANGE, ORANGE, BLUE ,  ORANGE, ORANGE, WHITE,
+  WHITE,  BLUE ,  ORANGE, ORANGE, ORANGE, BLUE ,  ORANGE, WHITE,
   WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,  WHITE,
 };
 
@@ -584,6 +584,23 @@ uint8_t ButtonGetLed(uint8_t bt) {
   return (ButtonsLedStates[ButtonLedBankMap[bt]] & ButtonLedBankMsk[bt] ? ON:OFF);
 
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Set a buttons bar mask
+///////////////////////////////////////////////////////////////////////////////
+void ButtonsBarSetLedMsk(uint8_t btBar,uint32_t bitsMsk) {
+
+  if (btBar == BT_BAR_MASTER ) {
+    ButtonsLedStates[1] = bitsMsk ;
+  }
+  else if ( btBar == BT_BAR_MODES) {
+    ButtonsLedStates[0] &= ( 0x00FFFFFF | bitsMsk) ;
+  }
+  else if ( btBar == BT_BAR_CONTROLS) {
+    ButtonsLedStates[0] &= 0xFF00FFFF | bitsMsk;
+  }
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Get the current pressed state of a button (not a pad !)
