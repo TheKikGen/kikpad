@@ -101,7 +101,7 @@ uint8_t usb_midi_is_transmitting(void);
 // --------------------------------------------------------------------------------------
 // To define the number of Midi ports, uncomment the right line below.
 //#define USB_MIDI_4X4
-//#define USB_MIDI_8X8
+#define USB_MIDI_8X8
 //#define USB_MIDI_12X12
 //#define USB_MIDI_16X16
 
@@ -115,10 +115,6 @@ uint8_t usb_midi_is_transmitting(void);
   #define USB_MIDI_IO_PORT_NUM  8
   #warning "8 USB midi ports defined"
 #elif defined(USB_MIDI_4X4)
-  #define USB_MIDI_IO_PORT_NUM  4
-  #warning "4 USB midi ports defined"
-#elseif
-  #define USB_MIDI_4X4
   #define USB_MIDI_IO_PORT_NUM  4
   #warning "4 USB midi ports defined"
 #else
