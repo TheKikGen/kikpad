@@ -34,10 +34,10 @@ It is necessary to open the Smartpad (remove panel from the back), and connect t
 
 Pinout is :
 
-* GND
-* SWDIO
-* SWDCLK
-* RESET
+* 1.GND
+* 2.SWDIO
+* 3.SWDCLK
+* 4.RESET
 
 You must also connect the USB cable for powering the Smartpad
 
