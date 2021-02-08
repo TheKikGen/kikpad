@@ -21,6 +21,8 @@ For a quick start, you can check the "demo" module, transforming the Kikpad in a
 
 I want to thank here DerFetzer for his similar project (developed in Rust) and the inspiration for the launch of this project realized under "lockdown " !  have a look here : https://github.com/DerFetzer/open-cleverpad
 
+Solenoid made also a great job by collecting a lot of information on the Midiplus Smartpad : https://github.com/s0len0id/smartpad-tester
+
 <br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a>.
 
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=thekikgen@gmail.com&lc=FR&item_name=Donation+to+TheKikGen+projects&no_note=0&cn=&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHosted)
