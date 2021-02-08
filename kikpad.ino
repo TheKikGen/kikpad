@@ -178,7 +178,8 @@ volatile uint16_t BtnScanStates[8][11] = {
 //#include "mod_kikpad_demo.h"
 //#include "mod_kikpad_MPC.h"
 //#include "mod_kikpad_MPCClips.h"
-#include "mod_kikpad_MPCController.h"
+//#include "mod_kikpad_MPCController.h"
+#include "mod_kikpad_MPCForce.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////
