@@ -14,10 +14,11 @@ The KikGen Labs proposes again a firmware entirely rewritten for a commercial pr
 
 The perspectives offered by this new open firmware are vast: fully custom0ized Ableton Live controller, chord generator, autonomous sequencer, master keyboard , etc....For example, I have developped an Akai Surface controller emulation for the MPC Live, allowing my Kikpad to be used as it was the native hardware.
 
+[![tkglctrl video](https://img.youtube.com/vi/l4OzAfEUoIQ/0.jpg)](https://www.youtube.com/watch?v=l4OzAfEUoIQ)
+
 [![tkglctrl video](https://img.youtube.com/vi/PQ-h3_DM6EI/0.jpg)](https://www.youtube.com/watch?v=PQ-h3_DM6EI)
 
 [![tkglctrl video](https://img.youtube.com/vi/fVG7otydEA0/0.jpg)](https://www.youtube.com/watch?v=fVG7otydEA0)
-
 
 For a quick start, you can check the "demo" module, transforming the Kikpad in a small midi keyboard and controller. 
 
