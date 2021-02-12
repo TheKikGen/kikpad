@@ -177,9 +177,9 @@ volatile uint16_t BtnScanStates[8][11] = {
 
 //#include "mod_kikpad_demo.h"
 //#include "mod_kikpad_MPC.h"
-//#include "mod_kikpad_MPCClips.h"
-//#include "mod_kikpad_MPCController.h"
-#include "mod_kikpad_MPCForce.h"
+//#include "mod_kikpad_MPCClipsTest.h"
+#include "mod_kikpad_MPCClipLauncher.h"
+//#include "mod_kikpad_MPCForce.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -292,28 +292,21 @@ void SerialPrintf(const char *format, ...)
 // DMC 13C LED Driver management
 //-----------------------------------------------------------------------------
 // 2 16 bits DMC 13 are cascaded in the SMARTPAD, so 32 bits can be written.
-// Bits are sent serialized from 0 to 31 with a clokc synchronization.
+// Bits are sent serialized from 0 to 31 with a clock synchronization.
 // End of transmission is done by raising LAT(ch)
 ///////////////////////////////////////////////////////////////////////////////
 static void WriteDMC(uint32_t mask) {
-  //FAST_DIGITAL_WRITE(DMC_DCK,0);
-  //FAST_DIGITAL_WRITE(DMC_LAT,0);
-  //delayMicroseconds(DELAY_DMC);
+
   for ( uint8_t i = 0; i!= 32 ; i++ ) {
-  //while (mask) {
-    if ( mask & 1 ) FAST_DIGITAL_WRITE(DMC_DAI, 1 );
-    else FAST_DIGITAL_WRITE(DMC_DAI, 0 );
-    //delayMicroseconds(DELAY_DMC);
+
+    FAST_DIGITAL_WRITE(DMC_DAI, mask & 1 );
     FAST_DIGITAL_WRITE(DMC_DCK,1);
-    //delayMicroseconds(DELAY_DMC);
     FAST_DIGITAL_WRITE(DMC_DCK,0);
-    //delayMicroseconds(DELAY_DMC);
     mask >>= 1;
   }
   FAST_DIGITAL_WRITE(DMC_LAT,1);
-  //delayMicroseconds(DELAY_DMC);
   FAST_DIGITAL_WRITE(DMC_LAT,0);
-  //delayMicroseconds(DELAY_DMC);
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -330,14 +323,9 @@ static boolean LedBankSet(uint8_t addr ) {
 
   lastAddr = addr;
 
-  if ( addr & 1 ) FAST_DIGITAL_WRITE(LS_A0, 1  ) ;
-  else FAST_DIGITAL_WRITE(LS_A0, 0  ) ;
-
-  if ( addr & 2 ) FAST_DIGITAL_WRITE(LS_A1, 1  ) ;
-  else FAST_DIGITAL_WRITE(LS_A1, 0  ) ;
-
-  if ( addr & 4 ) FAST_DIGITAL_WRITE(LS_A2, 1  ) ;
-  else FAST_DIGITAL_WRITE(LS_A2, 0  ) ;
+  FAST_DIGITAL_WRITE(LS_A0, addr & 1  );
+  FAST_DIGITAL_WRITE(LS_A1, ( addr & 2 ) >> 1  );
+  FAST_DIGITAL_WRITE(LS_A2, ( addr & 4 ) >> 2  ) ;
 
   return true;
 }
@@ -361,10 +349,12 @@ void RGBMaskUpdate(uint8_t padIdx) {
     }
   }
 }
+
 ///////////////////////////////////////////////////////////////////////////////
 // Update RGB colors mask used for RGB quantization of all 64 pads
 ///////////////////////////////////////////////////////////////////////////////
 void RGBMaskUpdateAll() {
+
   for ( uint8_t b = 0 ; b!= 6; b++) {
 
     // Color Depth
@@ -383,12 +373,13 @@ void RGBMaskUpdateAll() {
         }
     }
   }
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // CRTICAL ISR - TIMER2. USed for RGB colors quantizatiton.
 //-----------------------------------------------------------------------------
-// 64 colors are generated (3 colors depth) - 8 bits xxrgbRGB (EGA)
+// 64 colors are generated (3 colors depth) - 6 bits xxrgbRGB (EGA)
 // Buttons leds are also refreshed here (on/off only)
 // Duration : Around 60 uS
 ///////////////////////////////////////////////////////////////////////////////
@@ -434,14 +425,10 @@ void UserEventsTim3Handler() {
   // Encoders /////////////////////////////////////////////////////////////////
 
   // Set LS138 encoder address
-  if ( ecAddr & 1 ) FAST_DIGITAL_WRITE(EC_LS_A0, 1  ) ;
-  else FAST_DIGITAL_WRITE(EC_LS_A0, 0  ) ;
+  FAST_DIGITAL_WRITE(EC_LS_A0,ecAddr & 1);
+  FAST_DIGITAL_WRITE(EC_LS_A1, ( ecAddr & 2 ) >> 1  );
+  FAST_DIGITAL_WRITE(EC_LS_A2, ( ecAddr & 4 ) >> 2  );
 
-  if ( ecAddr & 2 ) FAST_DIGITAL_WRITE(EC_LS_A1, 1  ) ;
-  else FAST_DIGITAL_WRITE(EC_LS_A1, 0  ) ;
-
-  if ( ecAddr & 4 ) FAST_DIGITAL_WRITE(EC_LS_A2, 1  ) ;
-  else FAST_DIGITAL_WRITE(EC_LS_A2, 0  ) ;
   // mandatory delay to debounce
   delayMicroseconds(4);
 
@@ -497,7 +484,7 @@ void UserEventsTim3Handler() {
           }
           FAST_DIGITAL_WRITE(ScanButtonsColumns[c],1);
     }
-//  }
+
     if (++c == sizeof(ScanButtonsColumns) ) c =0;
 }
 
