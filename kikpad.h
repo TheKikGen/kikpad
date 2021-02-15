@@ -123,7 +123,7 @@ enum {
   LED_BANK_BT2,
 } LedBankIds;
 
-// 8 Colors RGB enum
+// EGA Colors rgbRGB enum
 typedef enum {
   BLACK    = 0B000000,
   BLUE     = 0B000001,
@@ -131,11 +131,12 @@ typedef enum {
   CYAN     = 0B000011,
   RED      = 0B000100,
   MAGENTA  = 0B000101,
-  YELLOW   = 0B000110,
+  YELLOW   = 0B110110,
   WHITE    = 0B000111,
   ORANGE   = 52,
   LT_RED   = 32,
   LT_GREEN = 50,
+  GREY = 48,
 } ledColor_t;
 
 enum {
