@@ -48,12 +48,20 @@ __ __| |           |  /_) |     ___|             |           |
 //------------------------------------------------------------------------------
 // RESET                       = HOLD BT_CONTROL4 & MASTER8 THEN PRESS SET
 // BOOTLOADER MODE             = HOLD BT_CONTROL4 & MASTER7 THEN PRESS SET
+
 // CLIP + PAD PRESSED          = TOGGLE CLIP LOOP
 // CLIP + SET                  = CLIP MODE NOTE ON / OFF . MIDI NOTE ON/OFF ONLY WHEN OFF
-// CLIP + MODE1 HOLDED         = CLEAR ALL CLIPS
-// MODE1 HOLDED + PAD PRESSED  = CLEAR CLIP
+//                             = Can be used to play the pad in real time
+
+// MODE1 = ERASE KEY
+// MODE1 HOLDED + CLIP         = CLEAR ALL CLIPS
+// MODE1 HOLDED + PAD PRESSED  = CLEAR CLIP ON PAD
+
+
 
 // VOLUME                      = TOGGLE LOWER/UPPER ENCODER BANK 1-8 / 8-16
+// SENDA + PAD                 = Send PAD PAD NOTE on channel 16 when mapped a global
+//                               Can be used to select the pad and
 //
 // MASTER 1-8 + PAD PRESSED    = CHANGE CLIP LENGTH 1 - 8
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,8 +86,6 @@ __ __| |           |  /_) |     ___|             |           |
 
 #define KIKPAD_MAX_BAR_LEN 8
 
-
-
 // Globals
 
 static boolean  MPCPlaying = false;
@@ -103,6 +109,13 @@ static const uint8_t KikpadPadsBankNotesMap[]={16,17,18,19,20,21,22,23};
 
 // Current pads velocity
 static uint8_t KikpadPadVelocity = KIPAD_PAD_DEFAULT_VELOCITY;
+
+// Check globally if one or many pad currently pressed
+static boolean PadPressed = false;
+
+// Check globally if one or many button are currently pressed
+static boolean ButtonPressed = false;
+
 
 // 2 banks of 8 encoders adressing 16 MPC Qlinks
 static uint8_t KikpadEncodersBank = 0;
@@ -158,33 +171,67 @@ enum MPCButtons {
   SWING,
   RETRO_RECORD,
   // Sequence parameters
+  NEXT_TRACK,
+  PREVIOUS_TRACK,
+  FIRST_TRACK,
+  LAST_TRACK,
+  NEXT_QLINK_MODE,
+  PREVIOUS_QLINK_MODE,
+  FIRST_QLINK_MODE,
+  LAST_QLINK_MODE,
 
+  // End
+  MPC_BUTTON_MAX
 } ;
+
+enum MPCButtonsType {
+  MAP_TO_NOTE,
+  MAP_TO_CC,
+};
 
 // Map a KIKPAD button to a MPC button, in the same order
 // as above.
+// Pad clips
+typedef struct{
+  uint8_t btnValue;
+  uint8_t type;
+  uint8_t value1;
+  uint8_t value2;
+}  __packed MPCButtonsMap_t;
 
-static const uint8_t MPCButtonsMap[] = {
+
+static const MPCButtonsMap_t MPCButtonsMap[] = {
   // Transport buttons. 0xFF if unmapped
- BT_RIGHT,   // PLAY
- BT_DOWN,    // STOP
- BT_LEFT,    // PLAY_START
- 0XFF,       // STEP_BK
- 0XFF,       // STEP_FWD
- 0XFF,       // EVENT_BK
- 0XFF,       // EVENT_FWD
- 0XFF,       // RECORD
- 0XFF,       // RECORD_FROM_SEQ_START
- BT_UP,      // OVERDUB
- 0XFF,       // PUNCH_IN
- BT_CONTROL4,// TAP_TEMPO
- 0XFF,       // GLOBAL_AUTOMATION
- 0XFF,       // TEMPO_SOURCE
- 0XFF,       // MASTER_VOLUME
- 0XFF,       // METRONOME_ENABLE
- 0XFF,       // TIME_CORRECT
- 0XFF,       // SWING
- 0XFF,       // RETRO_RECORD
+ { BT_RIGHT,   MAP_TO_NOTE, 0x00, 0x7F },       // PLAY
+ { BT_DOWN,    MAP_TO_NOTE, 0x01, 0x7F },       // STOP
+ { BT_LEFT,    MAP_TO_NOTE, 0x02, 0x7F },       // PLAY_START
+ { 0XFF,       MAP_TO_NOTE, 0x03, 0x7F },       // STEP_BK
+ { 0XFF,       MAP_TO_NOTE, 0x04, 0x7F },       // STEP_FWD
+ { 0XFF,       MAP_TO_NOTE, 0x05, 0x7F },       // EVENT_BK
+ { 0XFF,       MAP_TO_NOTE, 0x06, 0x7F },       // EVENT_FWD
+ { 0XFF,       MAP_TO_NOTE, 0x07, 0x7F },       // RECORD
+ { 0XFF,       MAP_TO_NOTE, 0x08, 0x7F },       // RECORD_FROM_SEQ_START
+ { BT_UP,      MAP_TO_NOTE, 0x09, 0x7F },       // OVERDUB
+ { 0XFF,       MAP_TO_NOTE, 0x0A, 0x7F },       // PUNCH_IN
+ { 0XFF,       MAP_TO_NOTE, 0x0B, 0x7F },       // TAP_TEMPO
+ { 0XFF,       MAP_TO_NOTE, 0x0C, 0x7F },       // GLOBAL_AUTOMATION
+ { 0XFF,       MAP_TO_NOTE, 0x0D, 0x7F },       // TEMPO_SOURCE
+ { 0XFF,       MAP_TO_NOTE, 0x0E, 0x7F },       // MASTER_VOLUME
+ { 0XFF,       MAP_TO_NOTE, 0x0F, 0x7F },       // METRONOME_ENABLE
+ { 0XFF,       MAP_TO_NOTE, 0x10, 0x7F },       // TIME_CORRECT
+ { 0XFF,       MAP_TO_NOTE, 0x11, 0x7F },       // SWING
+ { 0XFF,       MAP_TO_NOTE, 0x12, 0x7F },       // RETRO_RECORD
+
+ { 0XFF,       MAP_TO_CC,   0x01, 0x01 },       // NEXT_TRACK
+ { 0XFF,       MAP_TO_CC,   0x01, 0x7F },       // PREVIOUS_TRACK
+ { 0XFF,       MAP_TO_CC,   0x01, 0x7F - 0x30 },       // FIRST_TRACK
+ { 0XFF,       MAP_TO_CC,   0x01, 0x7F + 0X30 },       // LAST_TRACK
+
+ { 0XFF,       MAP_TO_CC,   0x02, 0x01 },       // NEXT_QLINK_MODE
+ { 0XFF,       MAP_TO_CC,   0x02, 0x7F },       // PREVIOUS_QLINK_MODE
+ { 0XFF,       MAP_TO_CC,   0x02, 0x7F - 0x30 },// FIRST_QLINK_MODE
+ { 0XFF,       MAP_TO_CC,   0x02, 0x7F + 0X30 },// LAST_QLINK_MODE
+
 };
 
 enum ClipStates {
@@ -233,7 +280,8 @@ static void ShowClipLen(uint len);
 static void ShowCurrentMPCBar();
 static void MPCClockEvent();
 static void KikpadClipClear(uint8_t idx);
-static void KikpadLaunchClipRow(uint8_t raw);
+static void KikpadLaunchClipRow(uint8_t row,boolean launch);
+static void KikpadClearClipRow(uint8_t row);
 static void KikpadClipResetAll();
 static void KikpadClipStartStopAll(boolean start);
 static uint8_t KikpadClipChangeLen(uint8_t idx);
@@ -246,6 +294,9 @@ static void MPCButtonNoteOn(uint8_t value);
 static void MPCButtonNoteOff(uint8_t value);
 static void KikpadPadNoteOn(uint8_t idx,midiPacket_t *pk);
 static void KikpadPadNoteOff(uint8_t idx,midiPacket_t *pk);
+static void MPCGotoTrack(uint8_t track);
+static void MPCPadSceneTrack(uint8_t track);
+
 void KikpadMod_ProcessUserEvent(UserEvent_t *ev);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -255,9 +306,9 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev);
 // -1 if not found
 ///////////////////////////////////////////////////////////////////////////////
 static int16_t MPCButtonGetMap(uint8_t btnValue) {
-  for ( uint8_t i = 0 ; i < sizeof(MPCButtonsMap) ; i++ ) {
-      if ( MPCButtonsMap[i] == 0xFF ) continue;
-      if ( btnValue == MPCButtonsMap[i] ) return i;
+  for ( uint8_t i = 0 ; i < MPC_BUTTON_MAX ; i++ ) {
+      if ( MPCButtonsMap[i].btnValue == 0xFF ) continue;
+      if ( btnValue == MPCButtonsMap[i].btnValue ) return i;
   }
   return -1;
 }
@@ -277,7 +328,6 @@ static void ShowClipLen(uint len) {
 ///////////////////////////////////////////////////////////////////////////////
 static void ShowCurrentMPCBar() {
 
-  // Preserve existing leds ON
   ButtonsBarSetLedMsk(BT_BAR_MASTER,0);
   ButtonSetLed(BT_MS1 + MPCBar  , ON);
 
@@ -289,6 +339,15 @@ static void ShowCurrentMPCBar() {
 static void KikpadClipEvStateMachine(uint8_t ev,uint8_t idx) {
 
   if ( ev == EV_PAD_PRESSED ) {
+
+    // Pad scene mode
+    if ( ButtonIsPressed(BT_SENDA) ) {
+
+      // Goto Track
+      MPCPadSceneTrack(KikpadClip[idx].bank);
+      return;
+    }
+
 
     if ( KikpadClip[idx].state == CLIP_EMPTY ) {
 
@@ -369,7 +428,7 @@ static void KikpadClipEvStateMachine(uint8_t ev,uint8_t idx) {
 // Launch and loop clip - Clip sequencer state machine
 // ----------------------------------------------------------------------------
 // STATE DIAGRAM :
-//  CLIP_EMPTY -> CLIP_SYNC_REC -> CLIP_SYNC_LAUNCH <-> CLIP_MUTED
+//
 ///////////////////////////////////////////////////////////////////////////////
 static void KikpadClipSequencer(SeqStates state) {
 
@@ -490,17 +549,15 @@ static void MPCClockEvent() {
         KikpadClipSequencer(SEQ_NEW_BAR);
 
       }
-      ButtonSetLed(MPCButtonsMap[PLAY], ON);
-      ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
-      if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+      ButtonSetLed(MPCButtonsMap[PLAY].btnValue, ON);
+      if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB].btnValue, ON);
     }
 
     // Ticks
     else {
       if ( MPCTick == 6 ) {
-        ButtonSetLed(MPCButtonsMap[PLAY], OFF);
-        ButtonSetLed(MPCButtonsMap[TAP_TEMPO], OFF);
-        if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB], OFF);
+        ButtonSetLed(MPCButtonsMap[PLAY].btnValue, OFF);
+        if (MPCOverdub) ButtonSetLed(MPCButtonsMap[OVERDUB].btnValue, OFF);
       }
       else
 
@@ -537,16 +594,31 @@ static void KikpadClipClear(uint8_t idx) {
 
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Launch a clip Row
-///////////////////////////////////////////////////////////////////////////////
-static void KikpadLaunchClipRow(uint8_t raw) {
 
-  uint8_t start = raw/8 ;
+///////////////////////////////////////////////////////////////////////////////
+// Clear a clip Row
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadClearClipRow(uint8_t row) {
+
+  uint8_t start = row * 8 ;
 
   for ( uint8_t i = start  ; i < start + 8 ; i++ ) {
     if ( KikpadClip[i].state != CLIP_EMPTY ) {
-      KikpadClip[i].state = CLIP_SYNC_LAUNCH;
+      KikpadClipClear(i);
+    }
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Launch a clip Row
+///////////////////////////////////////////////////////////////////////////////
+static void KikpadLaunchClipRow(uint8_t row,boolean launch) {
+
+  uint8_t start = row * 8 ;
+
+  for ( uint8_t i = start  ; i < start + 8 ; i++ ) {
+    if ( KikpadClip[i].state != CLIP_EMPTY ) {
+      KikpadClip[i].state = (launch ? CLIP_SYNC_LAUNCH:CLIP_SYNC_MUTE);
       PadSetColor(i, CLIP_COL_PENDING);
     }
   }
@@ -589,7 +661,7 @@ static void KikpadClipStartStopAll(boolean start) {
       }
       else if ( KikpadClip[i].state == CLIP_SYNC_MUTE ) {
           if ( !start) KikpadPadNoteOff(i,&pk);
-          KikpadClip[i].state == CLIP_MUTED ;
+          KikpadClip[i].state = CLIP_MUTED ;
           KikpadClip[i].countBar = 0 ;
           PadSetColor(i, KikpadPadsColors[i]);
       }
@@ -610,11 +682,11 @@ static uint8_t KikpadClipChangeLen(uint8_t idx) {
 
   // Change length if MS-1 MS-4 pressed
   for ( uint8_t i = 0 ; i < KIKPAD_MAX_BAR_LEN ; i++ ) {
-    if ( ButtonIsPressed( BT_MS1 + i ) ) {
+    if ( ButtonIsHolded( BT_MS1 + i ) ) {
       PadSetColor(idx, CLIP_COL_PENDING);
       KikpadClip[idx].lenBar = i + 1 ;
       if (KikpadClip[i].countBar > KikpadClip[idx].lenBar) KikpadClip[i].countBar = 0 ;
-      KikpadClip[idx].state ==  CLIP_SYNC_LAUNCH  ;
+      KikpadClip[idx].state =  CLIP_SYNC_LAUNCH  ;
       ShowClipLen(KikpadClip[idx].lenBar) ;
       return KikpadClip[idx].lenBar;
     }
@@ -628,10 +700,10 @@ static uint8_t KikpadClipChangeLen(uint8_t idx) {
 // INITIALIZE BOTTOM MODES BUTTON BAR LEDS
 ///////////////////////////////////////////////////////////////////////////////
 static void InitModesBarLeds() {
-  ButtonSetLed(MPCButtonsMap[PLAY_START], ON);
-  ButtonSetLed(MPCButtonsMap[PLAY], ON);
-  ButtonSetLed(MPCButtonsMap[TAP_TEMPO], ON);
-  ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
+  ButtonSetLed(MPCButtonsMap[PLAY_START].btnValue, ON);
+  ButtonSetLed(MPCButtonsMap[PLAY].btnValue, ON);
+  ButtonSetLed(MPCButtonsMap[TAP_TEMPO].btnValue, ON);
+  ButtonSetLed(MPCButtonsMap[OVERDUB].btnValue, ON);
   ButtonSetLed(BT_CLIP,KikpadModeClipNote ? OFF:ON);
 }
 
@@ -653,7 +725,7 @@ void KikpadMod_USBMidiParse(midiPacket_t *pk)
       // Start
       case 0xFA:
         MPCPlaying = true;
-        ButtonSetLed(MPCButtonsMap[STOP], ON);
+        ButtonSetLed(MPCButtonsMap[STOP].btnValue, ON);
         KikpadClipStartStopAll(true);
         MPCClock = MPCBar = MPCBeat = MPCTick = 0;
 
@@ -662,7 +734,7 @@ void KikpadMod_USBMidiParse(midiPacket_t *pk)
       // Continue
       case 0xFB:
         MPCPlaying = true;
-        ButtonSetLed(MPCButtonsMap[STOP], ON);
+        ButtonSetLed(MPCButtonsMap[STOP].btnValue, ON);
 
         break;
 
@@ -681,6 +753,39 @@ void KikpadMod_USBMidiParse(midiPacket_t *pk)
   }
 }
 
+
+///////////////////////////////////////////////////////////////////////////////
+// Pad scene mode fro track n
+///////////////////////////////////////////////////////////////////////////////
+static void MPCPadSceneTrack(uint8_t track) {
+
+  // Go to track
+  MPCGotoTrack(track);
+
+  // Move to pad scene mode ()
+  MPCButtonNoteOn(FIRST_QLINK_MODE);
+  for ( uint8_t i = 0 ; i < 3 ; i++ ) {
+    MPCButtonNoteOn(NEXT_QLINK_MODE);
+  }
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// NAVIGATE TO A SPECIFIC TRACK (MACRO). 0 is the first track.
+///////////////////////////////////////////////////////////////////////////////
+static void MPCGotoTrack(uint8_t track) {
+
+
+  // Go to track 1
+  MPCButtonNoteOn(FIRST_TRACK);
+
+  // Move to track
+  for ( uint8_t i = 0 ; i < track ; i++ ) {
+    MPCButtonNoteOn(NEXT_TRACK);
+  }
+
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // SEND a MPC mapped ENCODER CC midi message
 ///////////////////////////////////////////////////////////////////////////////
@@ -697,18 +802,29 @@ static void MPCEncoderSendCC(uint8_t encoder,uint8_t ccValue) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// SEND A MPC Mapped Button Note ON on cable 0
+// SEND A MPC Mapped Button Ctrl ON on cable 0
 ///////////////////////////////////////////////////////////////////////////////
-static void MPCButtonNoteOn(uint8_t value) {
+static void MPCButtonNoteOn(uint8_t btnValue) {
 
   midiPacket_t pk = { .i = 0 };
 
-  // Note on - cable 0
-  pk.packet[0] = 0x09 ;
-  pk.packet[1] = 0x90 + MPC_BUTTON_MIDI_CHANNEL ;
-  // Send Button midi message
-  pk.packet[2] = value ;
-  pk.packet[3] = 0x40;
+  // Note On
+  if ( MPCButtonsMap[btnValue].type == MAP_TO_NOTE ) {
+    // Note on - cable 0
+    pk.packet[0] = 0x09 ;
+    pk.packet[1] = 0x90 + MPC_BUTTON_MIDI_CHANNEL ;
+  } else
+  // CC
+  if ( MPCButtonsMap[btnValue].type == MAP_TO_CC ) {
+    // Note on - cable 0
+    pk.packet[0] = 0x0B ;
+    pk.packet[1] = 0xB0 + MPC_BUTTON_MIDI_CHANNEL ;
+  }
+  else return;
+
+  // Send values
+  pk.packet[2] = MPCButtonsMap[btnValue].value1 ;
+  pk.packet[3] = MPCButtonsMap[btnValue].value2 ;
 
   MidiUSB.writePacket(&pk.i);
 
@@ -717,16 +833,22 @@ static void MPCButtonNoteOn(uint8_t value) {
 ///////////////////////////////////////////////////////////////////////////////
 // SEND A MPC Mapped Button Note OFF on cable 0
 ///////////////////////////////////////////////////////////////////////////////
-static void MPCButtonNoteOff(uint8_t value) {
+static void MPCButtonNoteOff(uint8_t btnValue) {
+
+  // Only if mapped to note
+  if ( MPCButtonsMap[btnValue].type != MAP_TO_NOTE ) return;
+
+  // Note on - cable 0
 
   midiPacket_t pk = { .i = 0 };
 
   // Note off
   pk.packet[0] = 0x08 ;
   pk.packet[1] = 0x80 + MPC_BUTTON_MIDI_CHANNEL ;
-  // Send Button midi message
-  pk.packet[2] = value ;
-  pk.packet[3] = 0x40;
+
+  // Send values
+  pk.packet[2] = MPCButtonsMap[btnValue].value1 ;
+  pk.packet[3] = 0 ;
 
   MidiUSB.writePacket(&pk.i);
 
@@ -773,11 +895,6 @@ static void KikpadPadNoteOff(uint8_t idx,midiPacket_t *pk) {
 ///////////////////////////////////////////////////////////////////////////////
 void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 
-  // Compute time between 2 events
-  static unsigned long lastEventMicros = micros();
-  unsigned long eventDelayMicros = micros() - lastEventMicros;
-  lastEventMicros = micros();
-
   // To keep track of last event
   static uint8_t lastEventId  = EV_NONE;
   static uint8_t lastEventIdx = 0;
@@ -792,9 +909,14 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
     case EV_EC_CCW:
 
       {
+        // Compute time between 2 encoders events
+        static unsigned long lastEncoderEventMicros = micros();
+        unsigned long encoderEventDelayMicros = micros() - lastEncoderEventMicros;
+        lastEncoderEventMicros = micros();
+
         uint8_t e = idx + ( KikpadEncodersBank ? 8 : 0 ) ;
         // Compute accelerator factor regarding the turn speed.
-        uint8_t accel = 50 * 1000 / eventDelayMicros ;
+        uint8_t accel = 50 * 1000 / encoderEventDelayMicros ;
 
         #if defined(ENCODERS_RELATIVE)
 
@@ -805,7 +927,7 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 
         #else
           // Compute accelerator factor if <  100 millisecs
-          KikpadEncodersVal[e] += ( eventDelayMicros < 100*1000 ? 6:1 ) * ( ev->ev == EV_EC_CW ? 1 : -1);
+          KikpadEncodersVal[e] += ( encoderEventDelayMicros < 100*1000 ? 6:1 ) * ( ev->ev == EV_EC_CW ? 1 : -1);
 
           // as KikpadEncodersVal is unsigned, > 127 means also negative
           if ( KikpadEncodersVal[e] > 127 ) KikpadEncodersVal[e] = ( ev->ev == EV_EC_CW ? 127 : 0 );
@@ -818,6 +940,7 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 
     // Pad pressed and not released
     case EV_PAD_PRESSED:
+        PadPressed = true ;
         if (! KikpadModeClipNote ) {
           KikpadClipEvStateMachine(ev->ev,idx);
         }
@@ -830,6 +953,7 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 
     // Pad released
     case EV_PAD_RELEASED:
+        PadPressed = false ;
         if ( !KikpadModeClipNote )
           KikpadClipEvStateMachine(ev->ev,idx);
         else {
@@ -841,64 +965,100 @@ void KikpadMod_ProcessUserEvent(UserEvent_t *ev){
 
     // Button pressed and not released
     // Button released
+    // Button pressed and holded more than 2s
     case EV_BTN_PRESSED:
-    case EV_BTN_RELEASED:
-      {
-        // Is that button mapped to a MPC one ?
-        int16_t value = MPCButtonGetMap(idx);
-        if ( value  >= 0 ) {
-          // Send Button midi message
-          if ( ev->ev == EV_BTN_PRESSED ) {
-            MPCButtonNoteOn(value);
-          }
-          else {
-            // Note off
-            MPCButtonNoteOff(value);
+        ButtonPressed = true;
 
-            // Specific buttons released cases
-            switch (value) {
-              // Toggle Overdub
-              case OVERDUB:
-                  MPCOverdub = !MPCOverdub;
-                  ButtonSetLed(MPCButtonsMap[OVERDUB], ON);
-                  break;
+        if ( idx == BT_SET || idx == BT_SENDB || idx == BT_PAN ) {
+          ButtonSetLed(idx,ON);
+        }
+        else
+
+        // VOLUME PRESSED. Toggle encoders bank.
+        // 2 encoders banks 0-1. Light Volume if Bank 1 set.
+        if ( idx == BT_VOLUME ) {
+          KikpadEncodersBank = ! KikpadEncodersBank ;
+          ButtonSetLed(BT_VOLUME, KikpadEncodersBank);
+        }
+        else
+
+        // Master 1 - 8
+        if ( idx >= BT_MS1 && idx <= BT_MS8  ) {
+
+          // Change track SET + MASTER 1-8
+          if ( ButtonIsPressed(BT_SET) ) MPCGotoTrack(idx - BT_MS1);
+
+          // LAUNCH ROW : BT_SENDB + MASTER 1-8
+          else if ( ButtonIsPressed(BT_SENDB) ) KikpadLaunchClipRow(idx - BT_MS1,true);
+          // MUTE ROW : BT_SENDB + MASTER 1-8
+          else if ( ButtonIsPressed(BT_PAN) ) KikpadLaunchClipRow(idx - BT_MS1,false);
+          // CLEAR ROW : MODE1 + MASTER 1-8
+          else if ( ButtonIsPressed(BT_MODE1) ) KikpadClearClipRow(idx - BT_MS1);
+
+        }
+        else
+        // SET functions
+        if ( ButtonIsPressed(BT_SET) ) {
+
+          // Toggle Clip mode. SET + CLIP
+          if ( idx == BT_CLIP )  {
+            KikpadModeClipNote = ! KikpadModeClipNote;
+            ButtonSetLed(BT_CLIP,KikpadModeClipNote ? OFF:ON);
+          }
+        }
+        else
+
+        // MODE1 HOLDED : ERASE
+        if ( ButtonIsHolded(BT_MODE1) ) {
+
+          // ERASE + CLIP : Erase all clips
+          if ( idx == BT_CLIP ) {
+              KikpadClipResetAll();
+          }
+
+        }
+
+        // Default mapping for MPC buttons
+        else {
+          int16_t value = MPCButtonGetMap(idx);
+          if ( !PadPressed && value  >= 0  ) {
+            MPCButtonNoteOn(value);
+            if (value == OVERDUB ) {
+              MPCOverdub = !MPCOverdub;
+              ButtonSetLed(MPCButtonsMap[OVERDUB].btnValue, ON);
             }
           }
         }
-        else {
-          // Kikpad Internal buttons not mapped
+        break;
 
-          // VOLUME. Toggle encoders bank.
-          // 2 encoders banks 0-1. Light Volume if Bank 1 set.
-          if ( idx == BT_VOLUME && ev->ev == EV_BTN_PRESSED ) {
-              KikpadEncodersBank = ! KikpadEncodersBank ;
-              ButtonSetLed(BT_VOLUME, KikpadEncodersBank);
+    case EV_BTN_RELEASED:
+        {
+          ButtonPressed = false;
+
+          if (    idx == BT_SET
+               || idx == BT_MODE1
+               || ( idx >= BT_MS1 && idx <= BT_MS8 )
+               || idx == BT_SENDB
+               || idx == BT_PAN
+             ) {
+
+            ButtonSetLed(idx,OFF);
+
           }
-          else
 
-          if ( idx == BT_SET && ev->ev == EV_BTN_PRESSED ) {
 
-              // Toggle Clip mode. CLIP + SET
-              if ( ButtonIsPressed(BT_CLIP) )  {
-                KikpadModeClipNote = ! KikpadModeClipNote;
-                ButtonSetLed(BT_CLIP,KikpadModeClipNote ? OFF:ON);
-              }
+          int16_t value = MPCButtonGetMap(idx);
+          if ( !PadPressed && value  >= 0  ) {
+            MPCButtonNoteOff(value);
           }
         }
-        //ButtonSetLed(idx, ev->ev == EV_BTN_PRESSED ? ON:OFF );
+        break;
 
-      }
-
-      break;
-
-    // Button pressed and holded more than 2s
     case EV_BTN_HOLDED:
 
-      // CLIP + HOLD MODE 1 = Clear all clips in clip mode -
-      if ( idx == BT_MODE1 && ButtonIsPressed(BT_CLIP) ) {
-          KikpadClipResetAll();
+      if ( idx == BT_MODE1 || ( idx >= BT_MS1 && idx <= BT_MS8 ) ) {
+          ButtonSetLed(idx,ON);
       }
-
       break;
 
   }
