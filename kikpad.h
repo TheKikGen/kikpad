@@ -88,7 +88,7 @@ enum {
 } Switch;
 
 // Button hold threshold around 2s.
-#define BT_HOLD_THRESHOLD 500
+#define BT_HOLD_THRESHOLD 500*2
 
 // Pins of DMC13 and LS138 driving leds
 enum {
