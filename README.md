@@ -6,6 +6,8 @@
 # KIKPAD
 KiKPad : the Midiplus SmartPad reinvented !  
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=thekikgen@gmail.com&lc=FR&item_name=Donation+to+TheKikGen+projects&no_note=0&cn=&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHosted)
+
 <img alt="SmartPad from Midiplus" style="border-width:0" src="https://img.static-thomann.de/thumb/orig/pics/bdb/456726/13950016_800.webp" /></a>
 
 We did it again ! 
