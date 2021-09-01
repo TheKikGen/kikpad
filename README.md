@@ -53,6 +53,40 @@ Open the ST-LINK utility, and flash the bootloader bin file at 0x08000000.
 
 Unplug the STLINK, and the usb cable, and plug again the USB cable to the computer. You should see a new HID device in the device manager (or an lsusb command if under Linux).  Use then the tkg-flash utility provided with the bootloader to upload the Kikpad firmware.
 
+To check if everything is ok, reboot the Smartpad : you should see a HID device in your usb peripherals.
+
+About Arduino environment : I use the [ Roger's core](https://github.com/rogerclarkmelbourne/Arduino_STM32) for stm32. 
+
+Follow the instructions there to install this core after the Arduino platform setup.
+Install the midixparser library in your Arduino libraries directory : https://github.com/TheKikGen/midiXparser/archive/refs/heads/master.zip
+Try to compile some examples from the "File/examples" menu to check if the ARM compiler works.
+
+The uC within the Smartpad is a STM32F103RBT6.  I have adjusted the Roger's core configuration files for this uC + some tuning regarding upload methods. 
+You will find [here]( https://drive.google.com/file/d/1jRcGOslFXzFAclSNBjrFhx0LfZYUpfoG/view?usp=sharing) my full stm32duino package you can copy in your (home)/Arduino/hardware directory.  You need to restart the Aduino IDE after that.
+
+In the Arduino IDE, you need then to choose STM32F1 boards (stm32duino in sketchbook), then STM32F103RB variant.
+
+At first use the simple module mod_kikpad_demo.h that is a basic midi keyboard sending notes to the usb midi port.
+Uncomment from the line #176
+ 
+````
+// Kikpad functionnal module.Uncomment only one.
+
+#include "mod_kikpad_demo.h"
+//#include "mod_kikpad_MPC.h"
+//#include "mod_kikpad_MPCClipsTest.h"
+//#include "mod_kikpad_MPCClipLauncher.h"
+//#include "mod_kikpad_MPCForce.h"
+````
+
+The upload method (bootloader) changes the start address of your binary, during the linking process.  So you need to choose "Tkg HID bootloader 3.1" in the tools/upload method menu.
+
+Compile with ctrl+R.   If everything is ok, get the binary in your working directory with ctrl+alt+S, the file shoud be named "kikpad.ino.generic_stm32f103rb.bin".
+At this point, use the tkgflash utility on the command line to upload the binary into your kikpad the first time, or if update, switch the Kikpad to update mode (see below).
+
+For all modules, you can :
+- RESET = HOLD BT_CONTROL4 & MASTER8 THEN PRESS SET
+- UPDATE (bootloader mode)  = HOLD MODE2 & MASTER7 THEN PRESS SET
 
 
 
