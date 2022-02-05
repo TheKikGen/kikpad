@@ -47,7 +47,8 @@ Pinout is :
 You must also connect the USB cable for powering the Smartpad
 
 Download the bootloader firmware here :
-https://github.com/TheKikGen/stm32-tkg-hid-bootloader/releases
+https://github.com/TheKikGen/stm32-tkg-hid-bootloader/releases  
+Upload the tkg_hid_midiplus_smartpad.bin bootloader file with ST-LINK from the bootloader_only_binaries directory.
 
 Open the ST-LINK utility, and flash the bootloader bin file at 0x08000000.
 
