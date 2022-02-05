@@ -48,12 +48,24 @@ You must also connect the USB cable for powering the Smartpad
 
 Download the bootloader firmware here :
 https://github.com/TheKikGen/stm32-tkg-hid-bootloader/releases  
-Upload the tkg_hid_midiplus_smartpad.bin bootloader file with ST-LINK from the bootloader_only_binaries directory.
 
-Open the ST-LINK utility, and flash the bootloader bin file at 0x08000000.
+Once the Kikpad is connected to the STLINK :
+
+1/ Open the ST-LINK utility, and flash the bootloader "bootloader_only_binaries/tkg_hid_midiplus_smartpad.bin" file at 0x08000000.
 The original firmware from Midiplus is protected.  So you will have to remove the protection check to erase and reflash the Kikpad firmware.
 
-Unplug the STLINK, and the usb cable, and plug again the USB cable to the computer. You should see a new HID device in the device manager (or an lsusb command if under Linux).  Use then the tkg-flash utility provided with the bootloader to upload the Kikpad firmware.
+2/ Pickup one of the pre-compiled binary
+[kikpad.mod_MPC_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_MPC_stm32f103rb.bin)
+[kikpad.mod_demo_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_demo_stm32f103rb.bin)
+[kikpad.mod_force_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_force_stm32f103rb.bin)
+
+3/ Upload the mod_x bin file with STLINK at 0x8001000 or use tkg_flash utility to do that for you in HID mode
+
+4/ Disconnect Kikpad from USB and remove STLINK connector.
+Plug again in your computer.  You should see a "KIKPAD" midi device.
+
+
+# Hacking around
 
 About Arduino environment : I use the [ Roger's core](https://github.com/rogerclarkmelbourne/Arduino_STM32) for stm32. 
 
