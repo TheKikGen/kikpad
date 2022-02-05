@@ -34,6 +34,12 @@ Solenoid made also a great job by collecting a lot of information on the Midiplu
 
 # How to flash
 
+<img alt="STLINK stick" width="400" border="0" src="https://github.com/TheKikGen/kikpad/blob/master/doc/kikpad_stlink.jpg?raw=true" /></a>
+                                                                                                                                        
+<img alt="SmartPad from Midiplus" width="400" border="0" src="https://github.com/TheKikGen/kikpad/blob/master/doc/kikpad_board1.jpg?raw=true" /></a>
+
+(pictures : credit to "de douby").
+
 First, you must upload the bootloader at address 0x08000000, with STM-LINK UTILITY. You need an ST-LINK V2 stick to do that.   
 It is necessary to open the Smartpad (remove panel from the back), and connect the stick to the CN2 .   
 
@@ -55,9 +61,9 @@ Once the Kikpad is connected to the STLINK :
 The original firmware from Midiplus is protected.  So you will have to remove the protection check to erase and reflash the Kikpad firmware.
 
 2/ Pickup one of the pre-compiled binary
-[kikpad.mod_MPC_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_MPC_stm32f103rb.bin)
-[kikpad.mod_demo_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_demo_stm32f103rb.bin)
-[kikpad.mod_force_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_force_stm32f103rb.bin)
+[kikpad.mod_MPC_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_MPC_stm32f103rb.bin) 
+[kikpad.mod_demo_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_demo_stm32f103rb.bin) 
+[kikpad.mod_force_stm32f103rb.bin](https://github.com/TheKikGen/kikpad/blob/master/kikpad.mod_force_stm32f103rb.bin) 
 
 3/ Upload the mod_x bin file with STLINK at 0x8001000 or use tkg_flash utility to do that for you in HID mode
 
