@@ -51,10 +51,9 @@ https://github.com/TheKikGen/stm32-tkg-hid-bootloader/releases
 Upload the tkg_hid_midiplus_smartpad.bin bootloader file with ST-LINK from the bootloader_only_binaries directory.
 
 Open the ST-LINK utility, and flash the bootloader bin file at 0x08000000.
+The original firmware from Midiplus is protected.  So you will have to remove the protection check to erase and reflash the Kikpad firmware.
 
 Unplug the STLINK, and the usb cable, and plug again the USB cable to the computer. You should see a new HID device in the device manager (or an lsusb command if under Linux).  Use then the tkg-flash utility provided with the bootloader to upload the Kikpad firmware.
-
-To check if everything is ok, reboot the Smartpad : you should see a HID device in your usb peripherals.
 
 About Arduino environment : I use the [ Roger's core](https://github.com/rogerclarkmelbourne/Arduino_STM32) for stm32. 
 
