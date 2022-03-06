@@ -329,8 +329,7 @@ void SysEx_Parse(uint8_t byte)
       bool isPad = ( padL > 0 && padL < 9 && padC > 0 && padC < 9);
 
       if ( isPad) {
-        padL -= 1 ;
-        padC -= 1 ;
+        padL-- ; padC-- ;
         uint8_t pad = ( 7 - padL ) * 8 + padC;
         switch (sysexBuff[idx]) {
           case 0: // Static color
@@ -351,7 +350,7 @@ void SysEx_Parse(uint8_t byte)
       }
       // Button Led mapped ?
       else {
-        uint16_t b = LPButtonsMap_Inv[ sysexBuff[idx + 1 ] ];
+        int16_t b = LPButtonsMap_Inv[ sysexBuff[idx + 1 ] ];
         // The Smartpad has no colors for buttons. Only on/off
         switch (sysexBuff[idx]) {
           case 0: // Static color
@@ -388,31 +387,53 @@ void SysEx_Parse(uint8_t byte)
 ///////////////////////////////////////////////////////////////////////////////
 void KikpadMod_USBMidiParse(midiPacket_t *pk)
 {
-
   uint8_t cin   = pk->packet[0] & 0x0F ;
 
-  if ( cin == 0x0B ) {
+  // Lighting leds - Pads
+  if ( cin == 0x09 ) {
 
-      if ( pk->packet[1] == 0xB0 ) {
-
-          // switch (pk->packet[2]) {
-          //
-          //   // TAP led
-          //   case 0x35:
-          //     // Tap led on = 1 beat
-          //     if ( pk->packet[3] == 0x03 ) {
-          //       ButtonSetLed(BT_VOLUME, ON);
-          //     }
-          //     else {
-          //       ButtonSetLed(BT_VOLUME, OFF);
-          //     }
-          //
-          //     break;
-          // }
+      uint8_t padL = pk->packet[2] / 10 ;
+      uint8_t padC = pk->packet[2] % 10 ;
+      bool isPad = ( padL > 0 && padL < 9 && padC > 0 && padC < 9);
+      if ( isPad ) {
+        padL -- ;  padC -- ;
+        uint8_t pad = ( 7 - padL ) * 8 + padC;
+        // Static colour
+        if ( pk->packet[1] == 0x90 ) {
+          PadSetColor( pad, pk->packet[3] );
+        }
+        // Flashing colour
+        else if ( pk->packet[1] == 0x91 ) {
+        }
+        // Pulsing Colour
+        else if ( pk->packet[1] == 0x92 ) {
+        }
       }
   }
+
+  // Lighting Buttons
   else
+  if ( cin == 0x0B ) {
+    uint8_t padL = pk->packet[2] / 10 ;
+    uint8_t padC = pk->packet[2] % 10 ;
+    bool isPad = ( padL > 0 && padL < 9 && padC > 0 && padC < 9);
+    if ( !isPad ) {
+      int16_t b = LPButtonsMap_Inv[ pk->packet[2] ];
+      // Static colour
+      if ( pk->packet[1] == 0xB0 ) {
+        if ( b >= 0 ) ButtonSetLed(  b  , pk->packet[3] != 0 ? ON:OFF);
+      }
+      // Flashing colour
+      else if ( pk->packet[1] == 0xB1 ) {
+      }
+      // Pulsing Colour
+      else if ( pk->packet[1] == 0xB2 ) {
+      }
+    }
+  }
+
   // SYSEX
+  else
   if ( cin > 3 &&  cin < 8 ) {
      // CIN 5 exception : tune request
     if (pk->packet[1] == 0XF6) return ;
@@ -421,11 +442,7 @@ void KikpadMod_USBMidiParse(midiPacket_t *pk)
     for ( uint8_t i = 0 ; i< pklen ; i++ ) {
         SysEx_Parse(pk->packet[ i +  1 ]) ;
     }
-
-
   }
-
-  return;
 
 }
 
