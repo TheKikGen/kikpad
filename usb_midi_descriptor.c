@@ -80,16 +80,35 @@ __ __| |           |  /_) |     ___|             |           |
  };
 
 
- // Product string
- #define STRING_IPRODUCT_LEN 6
+ // Product string.  Check if it is dynamic of static
+
  #define STRING_IPRODUCT_ID 2
 
- static const usb_descriptor_string usbMIDIDescriptor_iProduct = {
-     .bLength = USB_DESCRIPTOR_STRING_LEN(STRING_IPRODUCT_LEN),
-     .bDescriptorType = USB_DESCRIPTOR_TYPE_STRING,
-     // USB_MIDI_PRODUCT_STRING_SIZE = 30
-     .bString =  { 'K', 0, 'I', 0, 'K', 0, 'P', 0, 'A', 0 ,'D', 0, }
- };
+ #ifdef USB_MIDI_PRODUCT_STRING_SIZE
+
+  #if USB_MIDI_PRODUCT_STRING_SIZE > 32
+    #error "USB_MIDI_PRODUCT_STRING_SIZE is 32 bytes maximum. Check usb_midi_device.h
+  #endif
+
+  #define STRING_IPRODUCT_LEN USB_MIDI_PRODUCT_STRING_SIZE
+  static usb_descriptor_string usbMIDIDescriptor_iProduct = {
+      .bLength = USB_DESCRIPTOR_STRING_LEN(STRING_IPRODUCT_LEN),
+      .bDescriptorType = USB_DESCRIPTOR_TYPE_STRING,
+      .bString =  { 'K', 0, 'I', 0, 'K', 0, 'P', 0, 'A', 0 ,'D', 0, 0,0, 0,0, 0,0, 0,0,
+                    0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0,
+                    0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0,
+                    0,0, 0,0, 0,0, },  // 33x2 max invluding tail 0
+  };
+ #else
+
+  #define STRING_IPRODUCT_LEN  6
+  static const usb_descriptor_string usbMIDIDescriptor_iProduct = {
+      .bLength = USB_DESCRIPTOR_STRING_LEN(STRING_IPRODUCT_LEN),
+      .bDescriptorType = USB_DESCRIPTOR_TYPE_STRING,
+      // USB_MIDI_PRODUCT_STRING_SIZE max = 32
+      .bString =  { 'K', 0, 'I', 0, 'K', 0, 'P', 0, 'A', 0 ,'D', 0, },
+  };
+ #endif
 
  // Interface string
  #define STRING_IINTERFACE_LEN 4
@@ -122,7 +141,10 @@ __ __| |           |  /_) |     ___|             |           |
  };
 
  // Assemble string descriptors array
- static const ONE_DESCRIPTOR usbMIDIString_Descriptor[] = {
+ #ifndef USB_MIDI_PRODUCT_STRING_SIZE
+ const
+ #endif
+  static ONE_DESCRIPTOR usbMIDIString_Descriptor[] = {
      {(uint8*)&usbMIDIDescriptor_LangID,       USB_DESCRIPTOR_STRING_LEN(1) },
      {(uint8*)&usbMIDIDescriptor_iManufacturer,USB_DESCRIPTOR_STRING_LEN(STRING_IMANUFACTURER_LEN)},
      {(uint8*)&usbMIDIDescriptor_iProduct,     USB_DESCRIPTOR_STRING_LEN(STRING_IPRODUCT_LEN)},
@@ -132,10 +154,10 @@ __ __| |           |  /_) |     ___|             |           |
  };
 
  // ---------------------------------------------------------------
- // DEVICE DESCRIPTOR (READ ONLY)
+ // DEVICE DESCRIPTOR  
  // ---------------------------------------------------------------
 
- static const usb_descriptor_device usbMIDIDescriptor_Device = {
+ static  usb_descriptor_device usbMIDIDescriptor_Device = {
        .bLength            = sizeof(usb_descriptor_device),
        .bDescriptorType    = USB_DESCRIPTOR_TYPE_DEVICE,
        .bcdUSB             = 0x0110,

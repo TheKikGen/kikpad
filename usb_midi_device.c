@@ -166,7 +166,7 @@ void (*usb_midi_ep_int_out[7])(void) =
 // DEVICE DESCRIPTOR MANIPULATION (IF NOT READ ONLY)
 // --------------------------------------------------------------------------------------
 
-#ifdef USB_MIDI_PRODUCT_STRING
+#ifdef USB_MIDI_PRODUCT_STRING_SIZE
 
 void usb_midi_set_vid_pid(uint16_t vid, uint16_t pid) {
   usbMIDIDescriptor_Device.idVendor           = vid;
@@ -174,7 +174,7 @@ void usb_midi_set_vid_pid(uint16_t vid, uint16_t pid) {
 
 }
 
-void usb_midi_set_product_string(char stringDescriptor[]) {
+void usb_midi_set_product_string(const char stringDescriptor[]) {
 
   // Check the true string descriptor size allocated by manual declaration
   // in usb_midi_descriptor.c. It is critical !!!

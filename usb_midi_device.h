@@ -76,7 +76,7 @@ extern "C" {
 // --------------------------------------------------------------------------------------
 
 void usb_midi_set_vid_pid(uint16_t vid, uint16_t pid);
-void usb_midi_set_product_string(char stringDescriptor[]);
+void usb_midi_set_product_string(const char stringDescriptor[]);
 
 void usb_midi_enable(gpio_dev *disc_dev, uint8_t disc_bit, uint8_t level);
 void usb_midi_disable(gpio_dev *disc_dev, uint8_t disc_bit, uint8_t level);
@@ -101,7 +101,7 @@ uint8_t usb_midi_is_transmitting(void);
 // --------------------------------------------------------------------------------------
 // To define the number of Midi ports, uncomment the right line below.
 //#define USB_MIDI_4X4
-#define USB_MIDI_8X8
+//#define USB_MIDI_8X8
 //#define USB_MIDI_12X12
 //#define USB_MIDI_16X16
 
@@ -126,13 +126,13 @@ uint8_t usb_midi_is_transmitting(void);
 // --------------------------------------------------------------------------------------
 // DESCRIPTOR IDS
 // --------------------------------------------------------------------------------------
-
 #define USB_MIDI_VENDORID            0x2912
 #define USB_MIDI_PRODUCTID           0x1975
-//#define USB_MIDI_PRODUCT_STRING      "KIKPAD"
 
-// String buffer max Size in the descriptor without tailing zero.
-#define USB_MIDI_PRODUCT_STRING_SIZE 30
+// String buffer max Size in the descriptor whitout tailing zero.
+// Define here if product string, pid vid are dynamically set,
+// otherwise the descriptor will be static.
+#define USB_MIDI_PRODUCT_STRING_SIZE 32
 
 // --------------------------------------------------------------------------------------
 // DESCRIPTORS TYPES
@@ -177,7 +177,7 @@ uint8_t usb_midi_is_transmitting(void);
 // configure the device, or perform control operations that are unique to the device.
 // Control Endpoint
 
-#define USB_MIDI_MAX_PACKET_SIZE          0x10  /* 64B, maximum for USB FS Devices */
+#define USB_MIDI_MAX_PACKET_SIZE          16  /* 64B, maximum for USB FS Devices */
 
 #define USB_MIDI_CTRL_ENDP       USB_EP0
 #define USB_MIDI_CTRL_RX_ADDR    0x40
@@ -190,7 +190,7 @@ uint8_t usb_midi_is_transmitting(void);
 // to transfers to the host from a device and OUT always refers to transfers
 // from the host to a device.
 
-#define MIDI_STREAM_EPSIZE       0x10
+#define MIDI_STREAM_EPSIZE       16
 
 #define MIDI_STREAM_IN_ENDP      USB_EP1
 #define MIDI_STREAM_IN_EPADDR    0xC0

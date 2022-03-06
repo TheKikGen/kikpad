@@ -49,9 +49,9 @@ __ __| |           |  /_) |     ___|             |           |
 // BOOTLOADER MODE   = HOLD BT_CONTROL4 & MASTER7 THEN PRESS SET
 ////////////////////////////////////////////////////////////////////////////////
 
+
 #include <string.h>
 #include <stdarg.h>
-
 #include <libmaple/nvic.h>
 #include "libmaple/flash.h"
 #include "libmaple/pwr.h"
@@ -59,8 +59,10 @@ __ __| |           |  /_) |     ___|             |           |
 #include "libmaple/bkp.h"
 
 #include "kikpad.h"
+
 #include "usb_midi.h"
 #include "usb_midi_device.h"
+
 #include "ringbuffer.h"
 #include "Rotary.h"
 #include <midiXparser.h>
@@ -178,9 +180,9 @@ volatile uint16_t BtnScanStates[8][11] = {
 //#include "mod_kikpad_demo.h"
 //#include "mod_kikpad_MPC.h"
 //#include "mod_kikpad_MPCClipsTest.h"
-#include "mod_kikpad_MPCClipLauncher.h"
+//#include "mod_kikpad_MPCClipLauncher.h"
 //#include "mod_kikpad_MPCForce.h"
-
+#include "mod_kikpad_LaunchPadMk3.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 //  CORE FUNCTIONS
@@ -694,6 +696,11 @@ static void ProcessUserEvent(UserEvent_t *ev){
             if (  ButtonIsPressed(BT_MS7) ) {
               PadLedStates[0] = PadLedStates[1] = ButtonsLedStates[0] = ButtonsLedStates[1] = 0;
               delay(100);
+              // Show our logo
+              memcpy(PadColorsCurrent,KikGenLogo,sizeof(PadColorsCurrent));
+              RGBMaskUpdateAll();
+              delay(100);
+              
               BootLoaderMode(); // Do a reset
             }
         }
@@ -726,6 +733,11 @@ static void USBMidi_Process()
 // SETUP
 ///////////////////////////////////////////////////////////////////////////////
 void setup() {
+
+  // Module pre_setup
+  #ifdef MODULE_PRE_SETUP
+  KikpadMod_Pre_Setup();
+  #endif
 
   Serial.end();
 
@@ -819,7 +831,7 @@ void setup() {
   RGBMaskUpdateAll();
   delay(1000);
 
-  // Initialize module
+  // Final module initialize
   KikpadMod_Setup();
 
 }

@@ -11,7 +11,7 @@ __ __| |           |  /_) |     ___|             |           |
   This file is part of the KIKPAD distribution
   https://github.com/TheKikGen/kikpad
   Copyright (c) 2020 TheKikGen Labs team.
-  -----------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   Disclaimer.
 
   This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License.
@@ -42,8 +42,7 @@ __ __| |           |  /_) |     ___|             |           |
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 */
 
-// KIKPAD_MPCForce : Akai Force controller emulation to work with an MPC Live
-// need tkgl_anyctrl.so LD_LOAD library
+// KIKPAD_MPCForce : Akai Force controller midi implementation
 
 #ifndef _KIKPAD_MODULE_H_
 #define _KIKPAD_MODULE_H_
@@ -88,7 +87,7 @@ const ForceButtonsMap_t ForceButtonsMap[] {
 { FORCE_DOWN, 0 }, //  BT_DOWN,
 { FORCE_LEFT, 0 }, //  BT_LEFT,
 { FORCE_RIGHT, 0 }, //  BT_RIGHT,
-{ FORCE_NAVIGATE, 0 }, //  BT_CLIP,
+{ FORCE_CLIP, 0 }, //  BT_CLIP,
 { -1, 0 }, //  BT_MODE1,
 { -1, 0 }, //  BT_MODE2,
 { -1, 0 }, //  BT_SET,
