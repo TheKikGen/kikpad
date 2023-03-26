@@ -229,18 +229,19 @@ static void LPPadSend(uint8_t value,boolean pressed) {
 // SET A PAD COLOR FROM RGB values
 ///////////////////////////////////////////////////////////////////////////////
 void SetPadColorRGB(uint8_t pad, uint8_t r, uint8_t g, uint8_t b ) {
-//6 bits xxrgbRGB (EGA)
-// 128 / 4 values
-// R Value 00 to 11
-uint8_t R = r / (128/4) ;
-uint8_t G = g / (128/4) ;
-uint8_t B = b / (128/4) ;
+// 6 bits xxrgbRGB (EGA)
+// Value are from 0 to 127 => 0 to 3
 
-uint8_t c = ( ( R & 0B10 ) << 1 ) + ( R & 0B01 << 5 ) +
-            ( ( G & 0B10 )  ) + ( G & 0B01 << 4 ) +
-            ( ( B >> 1 )  ) + ( B & 0B01 << 3 );
+r /= 42.333 ;
+g /= 42.333 ; 
+b /= 42.333 ;
 
-PadSetColor( pad, c);
+r = ( ( r & 0B10 ) << 1 ) + ( ( r & 0B1 ) << 5 );
+g = ( ( g & 0B10 )      ) + ( ( g & 0B1 ) << 4 );
+b = ( ( b & 0B10 ) >> 1 ) + ( ( b & 0B1 ) << 3 );
+
+
+PadSetColor( pad, r + g + b);
 
 }
 ///////////////////////////////////////////////////////////////////////////////
